@@ -280,31 +280,51 @@ def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: i
     cache_key = (asset, interval, limit)
     current_time = time.time()
 
-    if cache_key in PRICE_HISTORY_CACHE:
-        cached_data, cached_time = PRICE_HISTORY_CACHE[cache_key]
-        if current_time - cached_time < CACHE_TTL_SECONDS:
-            print(f"[HISTORY CACHE] ⚡ Returning cached data for {asset} ({int(current_time - cached_time)}s old)")
-            return {
-                "asset": asset,
-                "interval": interval,
-                "data": cached_data,
-                "cached": True
-            }
+    has_cached_data = cache_key in PRICE_HISTORY_CACHE
+    cached_data, cached_time = PRICE_HISTORY_CACHE[cache_key] if has_cached_data else (None, 0)
 
-    # Cache miss or expired - fetch from CoinGecko
-    print(f"[HISTORY ENDPOINT] Fetching {asset} history from CoinGecko")
+    # Return fresh cache if available
+    if has_cached_data and current_time - cached_time < CACHE_TTL_SECONDS:
+        print(f"[HISTORY CACHE] ⚡ Returning fresh cached data for {asset} ({int(current_time - cached_time)}s old)")
+        return {
+            "asset": asset,
+            "interval": interval,
+            "data": cached_data,
+            "cached": True
+        }
+
+    # Cache miss or expired - try to fetch from CoinGecko
+    print(f"[HISTORY ENDPOINT] Fetching {asset} history from CoinGecko (cached: {has_cached_data}, age: {int(current_time - cached_time) if has_cached_data else 'N/A'})")
     history = ae.get_price_history(asset, interval, limit)
     print(f"[HISTORY ENDPOINT] Got {len(history)} points for {asset}")
 
-    # Store in cache if we got data
+    # If fetch succeeded, update cache
     if history:
         PRICE_HISTORY_CACHE[cache_key] = (history, current_time)
         print(f"[HISTORY CACHE] ✓ Cached {len(history)} points for {asset}")
+        return {
+            "asset": asset,
+            "interval": interval,
+            "data": history,
+        }
 
+    # Fetch failed - return stale cache if we have it (better than nothing!)
+    if has_cached_data and cached_data:
+        print(f"[HISTORY CACHE] ⚠️  Fetch failed, returning STALE cache for {asset} ({int(current_time - cached_time)}s old)")
+        return {
+            "asset": asset,
+            "interval": interval,
+            "data": cached_data,
+            "cached": True,
+            "stale": True
+        }
+
+    # No data at all
+    print(f"[HISTORY CACHE] ✗ No cache and fetch failed for {asset}")
     return {
         "asset": asset,
         "interval": interval,
-        "data": history,
+        "data": [],
     }
 
 @app.get("/account/{user_address}", response_model=Account)
