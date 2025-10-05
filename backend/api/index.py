@@ -47,7 +47,7 @@ def get_or_create_account(address: str) -> Account:
 @app.get("/")
 def root():
     """Health check endpoint."""
-    return {"status": "ok", "service": "Claerdex Backend", "deployment": "vercel"}
+    return {"status": "ok", "service": "Claerdex Backend", "deployment": "vercel", "version": "2.0"}
 
 @app.get("/prices")
 def get_all_prices():
