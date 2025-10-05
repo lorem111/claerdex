@@ -13,25 +13,23 @@ from .models import Account, Position, OpenPositionRequest
 import os
 try:
     import redis
-    # Check if KV env vars are present
-    KV_URL = os.environ.get("KV_REST_API_URL")
-    KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
+    # Vercel KV uses REDIS_URL environment variable
+    REDIS_URL = os.environ.get("REDIS_URL")
 
-    if KV_URL and KV_TOKEN:
-        # Connect to Vercel KV via Redis
+    if REDIS_URL:
+        # Connect to Vercel KV via Redis URL
         kv_client = redis.from_url(
-            KV_URL,
-            password=KV_TOKEN,
+            REDIS_URL,
             decode_responses=True
         )
         # Test connection
         kv_client.ping()
         KV_AVAILABLE = True
-        print("[KV] ✓ Vercel KV connected successfully")
+        print(f"[KV] ✓ Vercel KV connected successfully to {REDIS_URL.split('@')[1] if '@' in REDIS_URL else 'Redis'}")
     else:
         KV_AVAILABLE = False
         kv_client = None
-        print("[KV] ✗ KV env vars not found (KV_REST_API_URL or KV_REST_API_TOKEN missing)")
+        print("[KV] ✗ REDIS_URL environment variable not found")
 except Exception as e:
     KV_AVAILABLE = False
     kv_client = None
@@ -251,9 +249,7 @@ def root():
 
     # Check KV environment variables
     kv_env_vars = {
-        "KV_REST_API_URL": "KV_REST_API_URL" in os.environ,
-        "KV_REST_API_TOKEN": "KV_REST_API_TOKEN" in os.environ,
-        "KV_REST_API_READ_ONLY_TOKEN": "KV_REST_API_READ_ONLY_TOKEN" in os.environ,
+        "REDIS_URL": "REDIS_URL" in os.environ,
     }
 
     return {

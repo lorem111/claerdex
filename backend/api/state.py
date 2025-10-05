@@ -7,15 +7,13 @@ import json
 # Import Redis for Vercel KV
 try:
     import redis
-    # Check if KV env vars are present
-    KV_URL = os.environ.get("KV_REST_API_URL")
-    KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
+    # Vercel KV uses REDIS_URL environment variable
+    REDIS_URL = os.environ.get("REDIS_URL")
 
-    if KV_URL and KV_TOKEN:
-        # Connect to Vercel KV via Redis
+    if REDIS_URL:
+        # Connect to Vercel KV via Redis URL
         kv = redis.from_url(
-            KV_URL,
-            password=KV_TOKEN,
+            REDIS_URL,
             decode_responses=True
         )
         # Test connection
@@ -26,7 +24,7 @@ try:
         USING_KV = False
         kv = None
         ACCOUNTS_DB = {}
-        print("[STATE KV] ✗ KV env vars not found, using in-memory storage")
+        print("[STATE KV] ✗ REDIS_URL not found, using in-memory storage")
 except Exception as e:
     USING_KV = False
     kv = None
