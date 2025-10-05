@@ -115,53 +115,19 @@ export const connectSuperheroWallet = async (): Promise<WalletInfo> => {
 
     // Connect to wallet using the CORRECT method
     const connectionInfo = await sdk.connectToWallet(superhero.getConnection());
-    console.log('Connection info:', connectionInfo);
-    console.log('Connection info keys:', Object.keys(connectionInfo));
+    console.log('✓ Connected to wallet:', connectionInfo);
 
-    // After connection, addresses should be available
-    console.log('sdk.addresses type:', typeof sdk.addresses);
-    console.log('sdk.address type:', typeof sdk.address);
+    // Get available addresses - addresses() is a function that returns array
+    const addresses = sdk.addresses();
+    console.log('Available addresses:', addresses);
 
-    // Get the current address
-    let address: string | undefined;
-
-    // Try to get the current address - sdk.address is a getter
-    try {
-      address = sdk.address;
-      console.log('Got address via sdk.address:', address);
-    } catch (e) {
-      console.log('sdk.address failed:', e);
+    if (!addresses || addresses.length === 0) {
+      throw new Error('No addresses available from Superhero Wallet');
     }
 
-    // If address is still undefined, try addresses
-    if (!address) {
-      try {
-        // Check if addresses is a function or a getter
-        const addrsFunc = sdk.addresses;
-        console.log('sdk.addresses:', addrsFunc);
-
-        // addresses appears to be a getter that returns a function that returns addresses
-        if (typeof addrsFunc === 'function') {
-          const addrs = addrsFunc();
-          console.log('Calling sdk.addresses() returned:', addrs);
-          if (addrs && addrs.length > 0) {
-            address = addrs[0];
-            console.log('Got address from addresses[0]:', address);
-          }
-        }
-      } catch (e) {
-        console.log('Error with addresses:', e);
-      }
-    }
-
-    if (!address) {
-      console.error('Could not find address. SDK state:', {
-        address: sdk.address,
-        addressesType: typeof sdk.addresses,
-        connectionInfo
-      });
-      throw new Error('Could not get wallet address from Superhero Wallet');
-    }
+    // Use the first address
+    const address = addresses[0];
+    console.log('Using address:', address);
 
     const networkId = connectionInfo.networkId || 'ae_mainnet';
 
