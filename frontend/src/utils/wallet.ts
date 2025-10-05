@@ -116,9 +116,6 @@ export const connectSuperheroWallet = async (): Promise<WalletInfo> => {
     // Connect to wallet using the CORRECT method
     const { networkId } = await sdk.connectToWallet(superhero.getConnection());
 
-    // Subscribe to address changes
-    await sdk.subscribeAddress('subscribe', 'connected');
-
     // Get current address
     const addresses = sdk.addresses();
     const address = addresses[0];

@@ -64,8 +64,8 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
               time: Math.floor(point.timestamp / 1000) as Time,
               value: point.close,
             }))
-            .sort((a, b) => a.time - b.time) // Sort by time ascending
-            .filter((point, index, arr) => {
+            .sort((a: { time: Time; value: number }, b: { time: Time; value: number }) => (a.time as number) - (b.time as number)) // Sort by time ascending
+            .filter((point: { time: Time; value: number }, index: number, arr: { time: Time; value: number }[]) => {
               // Remove duplicates
               if (index === 0) return true;
               return point.time !== arr[index - 1].time;
@@ -120,8 +120,8 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
             time: Math.floor(point.timestamp / 1000) as Time,
             value: point.close,
           }))
-          .sort((a, b) => a.time - b.time) // CRITICAL: Sort by time ascending
-          .filter((point, index, arr) => {
+          .sort((a: { time: Time; value: number }, b: { time: Time; value: number }) => (a.time as number) - (b.time as number)) // CRITICAL: Sort by time ascending
+          .filter((point: { time: Time; value: number }, index: number, arr: { time: Time; value: number }[]) => {
             // Remove duplicates - keep only first occurrence of each timestamp
             if (index === 0) return true;
             if (point.time === arr[index - 1].time) {
@@ -250,8 +250,8 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
           }
           return isValid;
         })
-        .sort((a, b) => a.time - b.time) // Ensure ascending order
-        .filter((point, index, arr) => {
+        .sort((a: { time: Time; value: number }, b: { time: Time; value: number }) => (a.time as number) - (b.time as number)) // Ensure ascending order
+        .filter((point: { time: Time; value: number }, index: number, arr: { time: Time; value: number }[]) => {
           // Remove duplicates - lightweight-charts doesn't allow duplicate times
           if (index === 0) return true;
           if (point.time === arr[index - 1].time) {
