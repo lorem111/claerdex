@@ -10,36 +10,91 @@ from .models import Account, Position, OpenPositionRequest
 
 app = FastAPI()
 
-# Server-side cache for price history to avoid CoinGecko rate limits
-# Format: {(asset, interval, limit): (data, timestamp)}
-PRICE_HISTORY_CACHE = {}
-CACHE_TTL_SECONDS = 300  # 5 minutes - CoinGecko data doesn't change that fast
+# Server-side price history storage - our source of truth
+# Format: {asset: [(timestamp, price), (timestamp, price), ...]}
+RECORDED_PRICE_HISTORY = {
+    "AE": [],
+    "BTC": [],
+    "ETH": [],
+    "SOL": []
+}
+MAX_HISTORY_POINTS = 1000  # Keep last 1000 price recordings per asset
 
-def initialize_price_cache():
-    """Pre-populate cache with all assets on startup to avoid rate limits"""
+def append_recorded_price(asset: str, price: float, timestamp_ms: int = None):
+    """Record a price point to our ongoing history"""
+    if asset not in RECORDED_PRICE_HISTORY:
+        return
+
+    if timestamp_ms is None:
+        timestamp_ms = int(time.time() * 1000)
+
+    # Append new price
+    RECORDED_PRICE_HISTORY[asset].append((timestamp_ms, price))
+
+    # Keep only the last MAX_HISTORY_POINTS
+    if len(RECORDED_PRICE_HISTORY[asset]) > MAX_HISTORY_POINTS:
+        RECORDED_PRICE_HISTORY[asset] = RECORDED_PRICE_HISTORY[asset][-MAX_HISTORY_POINTS:]
+
+    print(f"[PRICE RECORD] {asset}: ${price} recorded (total: {len(RECORDED_PRICE_HISTORY[asset])} points)")
+
+def get_recorded_history(asset: str, limit: int = 180) -> list:
+    """Get recorded price history in OHLC format"""
+    if asset not in RECORDED_PRICE_HISTORY:
+        return []
+
+    history = RECORDED_PRICE_HISTORY[asset]
+    if not history:
+        return []
+
+    # Get last 'limit' points
+    recent = history[-limit:] if len(history) > limit else history
+
+    # Convert to OHLC format
+    decimals = 6 if asset == "AE" else 2
+    ohlc_data = []
+
+    for timestamp_ms, price in recent:
+        rounded_price = round(price, decimals)
+        ohlc_data.append({
+            "timestamp": timestamp_ms,
+            "open": rounded_price,
+            "high": rounded_price,
+            "low": rounded_price,
+            "close": rounded_price,
+        })
+
+    return ohlc_data
+
+def initialize_price_history():
+    """Seed initial price history from CoinGecko if we have no recorded data"""
     assets = ["AE", "BTC", "ETH", "SOL"]
-    interval = "1m"
-    limit = 180
 
-    print("[CACHE INIT] Pre-populating price history cache...")
+    print("[HISTORY INIT] Checking if we need to seed initial price history...")
     for asset in assets:
+        if len(RECORDED_PRICE_HISTORY[asset]) > 0:
+            print(f"[HISTORY INIT] ✓ {asset} already has {len(RECORDED_PRICE_HISTORY[asset])} recorded points, skipping seed")
+            continue
+
+        print(f"[HISTORY INIT] Seeding initial history for {asset}...")
         try:
-            history = ae.get_price_history(asset, interval, limit)
+            # Fetch initial data from CoinGecko or fallback
+            history = ae.get_price_history(asset, "1m", 180)
             if history:
-                cache_key = (asset, interval, limit)
-                PRICE_HISTORY_CACHE[cache_key] = (history, time.time())
-                print(f"[CACHE INIT] ✓ Cached {len(history)} points for {asset}")
+                # Convert to our format and store
+                for point in history:
+                    RECORDED_PRICE_HISTORY[asset].append((point["timestamp"], point["close"]))
+                print(f"[HISTORY INIT] ✓ Seeded {len(history)} points for {asset}")
             else:
-                print(f"[CACHE INIT] ✗ No data for {asset}")
-            # Small delay to avoid rate limiting during init
+                print(f"[HISTORY INIT] ✗ No seed data for {asset}")
+            # Small delay to avoid rate limiting
             time.sleep(0.5)
         except Exception as e:
-            print(f"[CACHE INIT] ✗ Failed to cache {asset}: {e}")
+            print(f"[HISTORY INIT] ✗ Failed to seed {asset}: {e}")
 
 @app.on_event("startup")
 async def startup_event():
     """Run initialization tasks on server startup"""
-    initialize_price_cache()
+    initialize_price_history()
 
 # Add CORS middleware to allow frontend connections
 app.add_middleware(
@@ -89,14 +144,6 @@ def get_all_prices():
     import time
     from fastapi.responses import JSONResponse
 
-    # Try to import price_history, but don't crash if it fails
-    try:
-        from price_history import append_price_point
-        price_history_available = True
-    except Exception as e:
-        print(f"[PRICE HISTORY] Module not available: {e}")
-        price_history_available = False
-
     assets = ["AE", "BTC", "ETH", "SOL"]
 
     # Get current prices
@@ -108,13 +155,9 @@ def get_all_prices():
         prices[asset] = current_price
         stats_24h[asset] = ae.get_24h_stats(asset)
 
-        # RECORD PRICE TO HISTORY: Append current price to historical data
-        # This builds real price history over time
-        if price_history_available:
-            try:
-                append_price_point(asset, "1m", current_price)
-            except Exception as e:
-                print(f"[PRICE RECORD] Failed to append {asset} price: {e}")
+        # RECORD PRICE TO HISTORY: Append current price to our ongoing history
+        # This builds real price history over time as frontend polls /prices
+        append_recorded_price(asset, current_price)
 
     # Combine current prices with 24h statistics
     price_data = {}
@@ -276,55 +319,18 @@ def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: i
     # Limit the number of data points
     limit = min(limit, 1000)
 
-    # Check cache first to avoid CoinGecko rate limits
-    cache_key = (asset, interval, limit)
-    current_time = time.time()
+    # Use our recorded price history as the source of truth
+    history = get_recorded_history(asset, limit)
 
-    has_cached_data = cache_key in PRICE_HISTORY_CACHE
-    cached_data, cached_time = PRICE_HISTORY_CACHE[cache_key] if has_cached_data else (None, 0)
-
-    # Return fresh cache if available
-    if has_cached_data and current_time - cached_time < CACHE_TTL_SECONDS:
-        print(f"[HISTORY CACHE] ⚡ Returning fresh cached data for {asset} ({int(current_time - cached_time)}s old)")
-        return {
-            "asset": asset,
-            "interval": interval,
-            "data": cached_data,
-            "cached": True
-        }
-
-    # Cache miss or expired - try to fetch from CoinGecko
-    print(f"[HISTORY ENDPOINT] Fetching {asset} history from CoinGecko (cached: {has_cached_data}, age: {int(current_time - cached_time) if has_cached_data else 'N/A'})")
-    history = ae.get_price_history(asset, interval, limit)
-    print(f"[HISTORY ENDPOINT] Got {len(history)} points for {asset}")
-
-    # If fetch succeeded, update cache
     if history:
-        PRICE_HISTORY_CACHE[cache_key] = (history, current_time)
-        print(f"[HISTORY CACHE] ✓ Cached {len(history)} points for {asset}")
-        return {
-            "asset": asset,
-            "interval": interval,
-            "data": history,
-        }
+        print(f"[HISTORY ENDPOINT] ✓ Returning {len(history)} recorded points for {asset}")
+    else:
+        print(f"[HISTORY ENDPOINT] ⚠️  No recorded history for {asset} yet (frontend hasn't polled /prices enough)")
 
-    # Fetch failed - return stale cache if we have it (better than nothing!)
-    if has_cached_data and cached_data:
-        print(f"[HISTORY CACHE] ⚠️  Fetch failed, returning STALE cache for {asset} ({int(current_time - cached_time)}s old)")
-        return {
-            "asset": asset,
-            "interval": interval,
-            "data": cached_data,
-            "cached": True,
-            "stale": True
-        }
-
-    # No data at all
-    print(f"[HISTORY CACHE] ✗ No cache and fetch failed for {asset}")
     return {
         "asset": asset,
         "interval": interval,
-        "data": [],
+        "data": history,
     }
 
 @app.get("/account/{user_address}", response_model=Account)
