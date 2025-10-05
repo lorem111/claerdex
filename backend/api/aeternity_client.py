@@ -162,6 +162,7 @@ def get_latest_block() -> dict:
 def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list:
     """
     Generate historical price data for charting.
+    Works backwards from current real price to generate plausible historical data.
 
     Args:
         asset: Asset symbol (e.g., "AE", "BTC")
@@ -187,54 +188,56 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
     seconds = interval_seconds.get(interval, 60)
     current_time = int(time.time())
 
-    # Generate historical data points
+    # Get current REAL price from oracle
+    current_price = get_oracle_price(asset)
+
+    # Set volatility based on asset
+    volatility = VOLATILITY.get(asset, 0.002)
+
+    # Generate historical data working BACKWARDS from current price
     history = []
-    for i in range(limit, 0, -1):
-        # Calculate timestamp for this data point
+    price = current_price
+
+    # Work backwards through time
+    for i in range(limit):
+        # Calculate timestamp (going backwards from current time)
         timestamp = current_time - (i * seconds)
-        interval_num = timestamp // 5  # 5-second base intervals
 
-        # Generate price using same logic as get_oracle_price but for specific time
-        random.seed(interval_num * hash(asset))
-        base_price = BASE_PRICES[asset]
-        volatility = VOLATILITY.get(asset, 0.002)
+        # Use deterministic randomness based on timestamp for consistency
+        random.seed(timestamp * hash(asset))
 
-        # Simulate price movement
-        cumulative_change = 0
-        temp_seed = interval_num
-        for _ in range(min(interval_num % 100, 20)):
-            random.seed(temp_seed * hash(asset))
-            cumulative_change += random.uniform(-volatility, volatility)
-            temp_seed -= 1
+        # Generate realistic price movement (slightly random walk backwards)
+        price_change = random.uniform(-volatility, volatility)
+        price = price * (1 - price_change)  # Walk backwards
 
-        price = base_price * (1 + cumulative_change)
-        min_price = base_price * 0.9
-        max_price = base_price * 1.1
-        price = max(min_price, min(max_price, price))
-
+        # Add to history (we'll reverse it later)
         # Round appropriately
         if asset == "AE":
-            price = round(price, 4)
+            rounded_price = round(price, 4)
         else:
-            price = round(price, 2)
+            rounded_price = round(price, 2)
 
         # Generate OHLC data with slight variations
-        random.seed(interval_num * hash(asset) + 1)
-        variation = price * 0.001  # 0.1% variation for OHLC
+        random.seed(timestamp * hash(asset) + 1)
+        variation = rounded_price * 0.001  # 0.1% variation for OHLC
 
         history.append({
             "timestamp": timestamp * 1000,  # Convert to milliseconds
-            "open": round(price - random.uniform(-variation, variation), 4 if asset == "AE" else 2),
-            "high": round(price + random.uniform(0, variation), 4 if asset == "AE" else 2),
-            "low": round(price - random.uniform(0, variation), 4 if asset == "AE" else 2),
-            "close": price,
+            "open": round(rounded_price - random.uniform(-variation, variation), 4 if asset == "AE" else 2),
+            "high": round(rounded_price + random.uniform(0, variation), 4 if asset == "AE" else 2),
+            "low": round(rounded_price - random.uniform(0, variation), 4 if asset == "AE" else 2),
+            "close": rounded_price,
         })
+
+    # Reverse to get chronological order (oldest to newest)
+    history.reverse()
 
     return history
 
 def get_24h_stats(asset: str) -> dict:
     """
-    Calculate 24-hour price statistics.
+    Calculate 24-hour price statistics based on real current price.
+    Uses price history to get realistic 24h data.
 
     Returns:
         Dictionary with 24h high, low, open, and change percentage
@@ -248,60 +251,28 @@ def get_24h_stats(asset: str) -> dict:
             "change_percent_24h": 0,
         }
 
+    # Get current real price
     current_price = get_oracle_price(asset)
-    current_time = int(time.time())
-    time_24h_ago = current_time - 86400  # 24 hours in seconds
 
-    # Get price from 24h ago
-    interval_24h_ago = time_24h_ago // 5
-    random.seed(interval_24h_ago * hash(asset))
+    # Get 24h of historical data (using 1h intervals = 24 points)
+    history_24h = get_price_history(asset, interval="1h", limit=24)
 
-    base_price = BASE_PRICES[asset]
-    volatility = VOLATILITY.get(asset, 0.002)
+    if not history_24h:
+        return {
+            "high_24h": current_price,
+            "low_24h": current_price,
+            "open_24h": current_price,
+            "change_24h": 0,
+            "change_percent_24h": 0,
+        }
 
-    cumulative_change = 0
-    temp_seed = interval_24h_ago
-    for _ in range(min(interval_24h_ago % 100, 20)):
-        random.seed(temp_seed * hash(asset))
-        cumulative_change += random.uniform(-volatility, volatility)
-        temp_seed -= 1
+    # Extract highs and lows from history
+    highs = [point["high"] for point in history_24h]
+    lows = [point["low"] for point in history_24h]
+    price_24h_ago = history_24h[0]["open"]  # Opening price 24h ago
 
-    price_24h_ago = base_price * (1 + cumulative_change)
-    min_price = base_price * 0.9
-    max_price = base_price * 1.1
-    price_24h_ago = max(min_price, min(max_price, price_24h_ago))
-
-    # Calculate high and low over 24h period
-    # Sample prices every hour
-    prices_24h = []
-    for hours_ago in range(0, 25):
-        timestamp = current_time - (hours_ago * 3600)
-        interval_num = timestamp // 5
-        random.seed(interval_num * hash(asset))
-
-        cumulative_change = 0
-        temp_seed = interval_num
-        for _ in range(min(interval_num % 100, 20)):
-            random.seed(temp_seed * hash(asset))
-            cumulative_change += random.uniform(-volatility, volatility)
-            temp_seed -= 1
-
-        price = base_price * (1 + cumulative_change)
-        price = max(min_price, min(max_price, price))
-        prices_24h.append(price)
-
-    high_24h = max(prices_24h)
-    low_24h = min(prices_24h)
-
-    # Round appropriately
-    if asset == "AE":
-        high_24h = round(high_24h, 4)
-        low_24h = round(low_24h, 4)
-        price_24h_ago = round(price_24h_ago, 4)
-    else:
-        high_24h = round(high_24h, 2)
-        low_24h = round(low_24h, 2)
-        price_24h_ago = round(price_24h_ago, 2)
+    high_24h = max(highs + [current_price])
+    low_24h = min(lows + [current_price])
 
     # Calculate change
     change_24h = current_price - price_24h_ago
