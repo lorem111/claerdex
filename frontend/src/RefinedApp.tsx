@@ -105,6 +105,11 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [isConnecting, setIsConnecting] = useState(false);
   const toast = useToast();
 
+  // Debug: Log whenever backendPositions changes
+  useEffect(() => {
+    console.log('[STATE] backendPositions changed:', backendPositions);
+  }, [backendPositions]);
+
   // Fetch account state from backend - memoized to prevent infinite re-renders
   const refreshAccountState = useCallback(async () => {
     if (!account) return;
@@ -115,6 +120,8 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
       setBalance(accountState.on_chain_balance_ae);
       setAvailableCollateral(accountState.available_collateral_ae);
+
+      console.log('[ACCOUNT REFRESH] About to set backend positions:', accountState.positions);
       setBackendPositions(accountState.positions);
 
       console.log('[ACCOUNT REFRESH] ✓ Account state loaded:', {
@@ -170,8 +177,10 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
           // Use backend balance as source of truth (it's fresher)
           setBalance(backendBalance);
           setAvailableCollateral(accountState.available_collateral_ae);
+
+          console.log('[CONNECT] About to set backend positions:', accountState.positions);
           setBackendPositions(accountState.positions);
-          console.log('Backend account state loaded:', accountState);
+          console.log('[CONNECT] Backend account state loaded:', accountState);
         } catch (error) {
           console.error('Failed to load account from backend:', error);
           // Set fallback values if backend fails
