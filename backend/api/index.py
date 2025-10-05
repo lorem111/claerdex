@@ -244,14 +244,10 @@ def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: i
     # Limit the number of data points
     limit = min(limit, 1000)
 
-    # Try to use real history from price_history module
-    try:
-        from price_history import get_price_history as get_real_history
-        history = get_real_history(asset, interval, limit)
-    except Exception as e:
-        print(f"[PRICE HISTORY] Failed to get real history: {e}, falling back to old method")
-        # Fallback to old method from aeternity_client
-        history = ae.get_price_history(asset, interval, limit)
+    # ALWAYS use aeternity_client for now (skip price_history module due to KV issues)
+    print(f"[HISTORY ENDPOINT] Fetching {asset} history using aeternity_client")
+    history = ae.get_price_history(asset, interval, limit)
+    print(f"[HISTORY ENDPOINT] Got {len(history)} points for {asset}")
 
     return {
         "asset": asset,
