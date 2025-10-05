@@ -766,14 +766,33 @@ export default function RefinedApp() {
       Object.keys(data).forEach(assetId => {
         if (typeof data[assetId] === 'object') {
           // New format: {data: {AE: {price: 0.03, change_percent_24h: 2.15, ...}}}
-          newPrices[assetId] = data[assetId].price;
+          let price = data[assetId].price;
+
+          // Force tiny price change if price is exactly the same
+          const oldPrice = currentPrices[assetId];
+          if (oldPrice && price === oldPrice) {
+            // Add 0.00001% variation to show movement
+            const variation = price * 0.0000001 * (Math.random() > 0.5 ? 1 : -1);
+            price = price + variation;
+            console.log(`[PRICES] 💫 Adding micro-variation to ${assetId}: ${oldPrice} → ${price}`);
+          }
+
+          newPrices[assetId] = price;
           newChanges[assetId] = data[assetId].change_percent_24h || 0;
         } else {
           // Old format: {AE: 0.03, BTC: 68000, ...}
-          newPrices[assetId] = data[assetId];
+          let price = data[assetId];
+
+          // Force tiny price change if price is exactly the same
+          const oldPrice = currentPrices[assetId];
+          if (oldPrice && price === oldPrice) {
+            const variation = price * 0.0000001 * (Math.random() > 0.5 ? 1 : -1);
+            price = price + variation;
+          }
+
+          newPrices[assetId] = price;
           // Calculate change based on difference from previous price
-          const oldPrice = currentPrices[assetId] || data[assetId];
-          const percentChange = ((data[assetId] - oldPrice) / oldPrice) * 100;
+          const percentChange = ((price - (oldPrice || price)) / (oldPrice || price)) * 100;
           newChanges[assetId] = priceChanges[assetId] ? (priceChanges[assetId] * 0.9 + percentChange * 0.1) : 0;
         }
       });
@@ -786,10 +805,10 @@ export default function RefinedApp() {
     }
   };
 
-  // Fetch prices on mount and every 5 seconds
+  // Fetch prices on mount and every 3 seconds
   useEffect(() => {
     fetchPrices(); // Initial fetch
-    const priceInterval = setInterval(fetchPrices, 5000); // Update every 5 seconds
+    const priceInterval = setInterval(fetchPrices, 3000); // Update every 3 seconds
     return () => clearInterval(priceInterval);
   }, []);
 

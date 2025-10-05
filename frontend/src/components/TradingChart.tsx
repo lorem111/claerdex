@@ -31,15 +31,25 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
   const [historicalData, setHistoricalData] = useState<Array<{ time: Time; value: number }>>([]);
+  const [timeframe, setTimeframe] = useState<'1m' | '15m' | '30m'>('1m');
+
+  // Timeframe configurations
+  const timeframeConfigs = {
+    '1m': { interval: '1m', limit: 180, label: '1min' },
+    '15m': { interval: '15m', limit: 96, label: '15min' },  // 96 * 15min = 24 hours
+    '30m': { interval: '30m', limit: 48, label: '30min' },  // 48 * 30min = 24 hours
+  };
 
   // Fetch real historical data from backend with INSTANT cache-first loading
   useEffect(() => {
     const fetchHistoricalData = async () => {
       try {
+        const config = timeframeConfigs[timeframe];
+
         // INSTANT LOAD: Try cache first for instant chart display
-        const cached = getCachedChart(asset.id, '1m');
+        const cached = getCachedChart(asset.id, timeframe);
         if (cached) {
-          console.log(`[CHART] ⚡ INSTANT load from cache for ${asset.id}`);
+          console.log(`[CHART] ⚡ INSTANT load from cache for ${asset.id} (${timeframe})`);
           const chartData = cached.data.map((point: any) => ({
             time: Math.floor(point.timestamp / 1000) as Time,
             value: point.close,
@@ -51,9 +61,9 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         }
 
         // BACKGROUND REFRESH: Fetch fresh data
-        console.log(`[CHART] 🔄 Fetching fresh historical data for ${asset.id}...`);
+        console.log(`[CHART] 🔄 Fetching fresh historical data for ${asset.id} (${timeframe})...`);
         const response = await fetch(
-          `https://claerdex-backend.vercel.app/prices/history?asset=${asset.id}&interval=1m&limit=180`
+          `https://claerdex-backend.vercel.app/prices/history?asset=${asset.id}&interval=${config.interval}&limit=${config.limit}`
         );
 
         if (!response.ok) {
@@ -67,9 +77,9 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         }
 
         // Cache the fresh data for next instant load
-        cacheChart(asset.id, '1m', result.data);
+        cacheChart(asset.id, timeframe, result.data);
 
-        console.log(`[CHART] ✓ Received ${result.data.length} REAL data points for ${asset.id}`);
+        console.log(`[CHART] ✓ Received ${result.data.length} REAL data points for ${asset.id} (${timeframe})`);
         console.log(`[CHART] Price range: $${result.data[0].close} → $${result.data[result.data.length - 1].close}`);
 
         // Convert backend format to chart format
@@ -79,7 +89,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         }));
 
         setHistoricalData(chartData);
-        console.log(`[CHART] ✓ Chart updated with fresh backend data for ${asset.id}`);
+        console.log(`[CHART] ✓ Chart updated with fresh backend data for ${asset.id} (${timeframe})`);
       } catch (error) {
         console.error(`[CHART] ✗ Failed to fetch historical data:`, error);
         // Keep cached data if fetch fails, or show empty
@@ -87,7 +97,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
     };
 
     fetchHistoricalData();
-  }, [asset]);
+  }, [asset, timeframe]);
 
   // Initialize chart
   useEffect(() => {
@@ -223,6 +233,23 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
 
   return (
     <div className="relative">
+      {/* Timeframe Selector */}
+      <div className="absolute top-4 left-4 z-10 flex gap-2">
+        {Object.entries(timeframeConfigs).map(([key, config]) => (
+          <button
+            key={key}
+            onClick={() => setTimeframe(key as '1m' | '15m' | '30m')}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+              timeframe === key
+                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                : 'bg-slate-800/60 text-slate-400 hover:bg-slate-700/60 hover:text-slate-300 border border-slate-700'
+            }`}
+          >
+            {config.label}
+          </button>
+        ))}
+      </div>
+
       {/* Position Legend */}
       {positions.length > 0 && (
         <div className="absolute top-4 right-4 z-10 bg-slate-900/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-700 max-w-xs">

@@ -35,7 +35,7 @@ KV_LOADED = {
     "ETH": False,
     "SOL": False
 }
-MAX_HISTORY_POINTS = 1000  # Keep last 1000 price recordings per asset
+MAX_HISTORY_POINTS = 5000  # Keep last 5000 points (at 3s intervals = ~4 hours of data)
 
 def get_kv_key(asset: str) -> str:
     """Generate KV key for price history"""
