@@ -109,18 +109,44 @@ const useWeb3 = () => useContext(Web3Context);
 // HEADER COMPONENT
 function Header() {
   const { account, balance, isConnecting, connectWallet, disconnectWallet } = useWeb3();
+  const [currentBlock, setCurrentBlock] = useState(0);
+
+  // Simulate block number updates
+  useEffect(() => {
+    const startBlock = 57866199;
+    setCurrentBlock(startBlock);
+
+    const interval = setInterval(() => {
+      setCurrentBlock(prev => prev + 1);
+    }, 3000); // New block every 3 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <header className="border-b border-slate-800 bg-slate-950/95 backdrop-blur supports-[backdrop-filter]:bg-slate-950/60">
       <div className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-pink-500 to-purple-600">
-              <BarChart3 className="w-6 h-6 text-white" />
+          <div className="flex items-center gap-6">
+            {/* Logo */}
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-pink-500 to-purple-600 rounded-lg blur-sm opacity-50"></div>
+                <div className="relative flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-pink-500 to-purple-600">
+                  <BarChart3 className="w-6 h-6 text-white" />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-white tracking-tight">Claer</h1>
+                <p className="text-xs text-slate-400">Hybrid Perpetual DEX</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">Claer</h1>
-              <p className="text-xs text-slate-400">Hybrid Perpetual DEX</p>
+
+            {/* Block Number */}
+            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-900/50 rounded-md border border-slate-800">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+              <span className="text-xs text-slate-400">Block</span>
+              <span className="text-sm font-semibold text-white">{currentBlock.toLocaleString()}</span>
             </div>
           </div>
 
