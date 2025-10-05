@@ -8,6 +8,7 @@ import time
 import random
 import requests
 import os
+from typing import Optional
 from models import Position
 
 # Base prices for assets (starting point)
@@ -159,7 +160,7 @@ def get_latest_block() -> dict:
             "error": str(e)
         }
 
-def get_price_history(asset: str, interval: str = "1m", limit: int = 60, current_price: float = None) -> list:
+def get_price_history(asset: str, interval: str = "1m", limit: int = 60, current_price: Optional[float] = None) -> list:
     """
     Generate historical price data for charting.
     Works backwards from current real price to generate plausible historical data.
