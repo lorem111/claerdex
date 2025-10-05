@@ -1,13 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
-import sys
-import os
 
-# Add parent directory to path to import our modules
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
-# Import our modules
+# Import from same directory (api/)
 import aeternity_client as ae
 import state as db
 from models import Account, Position, OpenPositionRequest
