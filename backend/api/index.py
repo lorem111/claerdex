@@ -234,12 +234,21 @@ def root():
     # Show how much recorded history we have
     history_counts = {asset: len(RECORDED_PRICE_HISTORY[asset]) for asset in RECORDED_PRICE_HISTORY}
 
+    # Check KV environment variables
+    kv_env_vars = {
+        "KV_REST_API_URL": "KV_REST_API_URL" in os.environ,
+        "KV_REST_API_TOKEN": "KV_REST_API_TOKEN" in os.environ,
+        "KV_REST_API_READ_ONLY_TOKEN": "KV_REST_API_READ_ONLY_TOKEN" in os.environ,
+    }
+
     return {
         "status": "ok",
         "service": "Claerdex Backend",
         "deployment": "vercel",
-        "version": "2.2",
+        "version": "2.3",
         "oracle_configured": oracle_url_set,
+        "kv_available": KV_AVAILABLE,
+        "kv_env_vars": kv_env_vars,
         "recorded_history_points": history_counts
     }
 
