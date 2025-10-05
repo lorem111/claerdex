@@ -136,3 +136,31 @@ export function prefetchPrices(): Promise<CachedPriceData> {
       };
     });
 }
+
+/**
+ * Clear all cached price and chart data - useful for debugging stale data
+ */
+export function clearAllPriceCache(): void {
+  try {
+    console.log('[CACHE] Clearing all price and chart cache...');
+    // Clear price cache
+    localStorage.removeItem(PRICE_CACHE_KEY);
+    localStorage.removeItem(PRICE_CACHE_TIMESTAMP_KEY);
+
+    // Clear all chart caches
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith(CHART_CACHE_PREFIX)) {
+        localStorage.removeItem(key);
+      }
+    });
+
+    console.log('[CACHE] ✓ All cache cleared - refresh page for fresh data');
+  } catch (error) {
+    console.error('Error clearing cache:', error);
+  }
+}
+
+// Expose to window for debugging in console
+if (typeof window !== 'undefined') {
+  (window as any).clearPriceCache = clearAllPriceCache;
+}

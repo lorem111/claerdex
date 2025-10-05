@@ -72,12 +72,12 @@ type Web3ContextType = {
 const PRICE_API_URL = 'https://claerdex-backend.vercel.app/prices';
 const BLOCKCHAIN_STATUS_URL = 'https://claerdex-backend.vercel.app/blockchain/status';
 
-// ASSETS (price will be fetched from API)
+// ASSETS (price will be fetched from API - these are just placeholders for initial load)
 const ASSETS: Asset[] = [
-  { id: 'AE', name: 'Aeternity', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1700.png', price: 0.03, change: 0 },
-  { id: 'BTC', name: 'Bitcoin', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1.png', price: 68000, change: 0 },
-  { id: 'ETH', name: 'Ethereum', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png', price: 3500, change: 0 },
-  { id: 'SOL', name: 'Solana', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png', price: 165.21, change: 0 },
+  { id: 'AE', name: 'Aeternity', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1700.png', price: 0.0075, change: 0 },
+  { id: 'BTC', name: 'Bitcoin', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1.png', price: 123000, change: 0 },
+  { id: 'ETH', name: 'Ethereum', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png', price: 4500, change: 0 },
+  { id: 'SOL', name: 'Solana', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png', price: 230, change: 0 },
 ];
 
 // Chart data generation moved to TradingChart component
@@ -747,8 +747,11 @@ export default function RefinedApp() {
 
       // BACKGROUND REFRESH: Fetch fresh data (this happens in background)
       console.log('[PRICES] 🔄 Fetching fresh prices from backend...');
-      const response = await fetch(PRICE_API_URL);
+      // Add cache-busting timestamp to force fresh data
+      const response = await fetch(`${PRICE_API_URL}?t=${Date.now()}`);
       const responseData = await response.json();
+
+      console.log('[PRICES] Raw backend response:', responseData);
 
       // Cache the fresh data for next instant load
       cachePrices(responseData);
