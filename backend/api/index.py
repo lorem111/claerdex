@@ -56,7 +56,14 @@ def get_all_prices():
     """Endpoint for the frontend to get all relevant asset prices at once."""
     import time
     from fastapi.responses import JSONResponse
-    from price_history import append_price_point
+
+    # Try to import price_history, but don't crash if it fails
+    try:
+        from price_history import append_price_point
+        price_history_available = True
+    except Exception as e:
+        print(f"[PRICE HISTORY] Module not available: {e}")
+        price_history_available = False
 
     assets = ["AE", "BTC", "ETH", "SOL"]
 
@@ -71,10 +78,11 @@ def get_all_prices():
 
         # RECORD PRICE TO HISTORY: Append current price to historical data
         # This builds real price history over time
-        try:
-            append_price_point(asset, "1m", current_price)
-        except Exception as e:
-            print(f"[PRICE RECORD] Failed to append {asset} price: {e}")
+        if price_history_available:
+            try:
+                append_price_point(asset, "1m", current_price)
+            except Exception as e:
+                print(f"[PRICE RECORD] Failed to append {asset} price: {e}")
 
     # Combine current prices with 24h statistics
     price_data = {}
@@ -123,12 +131,7 @@ def get_blockchain_status():
 @app.get("/prices/history")
 def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: int = 60):
     """
-    Get REAL historical price data for charting.
-
-    This endpoint:
-    1. First time: Fetches 7 days of real data from CoinGecko
-    2. Ongoing: Returns stored real price history
-    3. Continuously updated: New prices appended as they come in
+    Get historical price data for charting.
 
     Args:
         asset: Asset symbol (AE, BTC, ETH, SOL)
@@ -136,10 +139,8 @@ def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: i
         limit: Number of data points (max 1000)
 
     Returns:
-        Historical OHLC price data from real sources
+        Historical OHLC price data
     """
-    from price_history import get_price_history as get_real_history
-
     # Validate inputs
     valid_assets = ["AE", "BTC", "ETH", "SOL"]
     valid_intervals = ["1m", "5m", "15m", "1h", "4h", "1d"]
@@ -153,8 +154,14 @@ def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: i
     # Limit the number of data points
     limit = min(limit, 1000)
 
-    # Get REAL historical data (auto-initializes from CoinGecko if needed)
-    history = get_real_history(asset, interval, limit)
+    # Try to use real history from price_history module
+    try:
+        from price_history import get_price_history as get_real_history
+        history = get_real_history(asset, interval, limit)
+    except Exception as e:
+        print(f"[PRICE HISTORY] Failed to get real history: {e}, falling back to old method")
+        # Fallback to old method from aeternity_client
+        history = ae.get_price_history(asset, interval, limit)
 
     return {
         "asset": asset,
