@@ -10,7 +10,7 @@ const path = require("path");
 const qrcode = require("qrcode-terminal");
 const BigNumber = require("bignumber.js");
 
-const url = "https://testnet.aeternity.io/";
+const url = "https://mainnet.aeternity.io/";
 
 module.exports = class Aeternity {
   stopAwaitFunding = false;
