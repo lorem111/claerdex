@@ -193,6 +193,12 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
     current_price = get_oracle_price(asset)
     print(f"[Historical Data] Oracle returned ${current_price} for {asset}")
 
+    # Ensure we're not using fallback BASE_PRICES
+    if current_price < BASE_PRICES.get(asset, 0) * 1.5:
+        # Might be using fallback, try oracle one more time
+        print(f"[Historical Data] Price seems low, retrying oracle...")
+        current_price = get_oracle_price(asset)
+
     # Set volatility based on asset
     volatility = VOLATILITY.get(asset, 0.002)
 

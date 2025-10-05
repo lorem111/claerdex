@@ -2,10 +2,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
 
-# Import from same directory (api/)
-import aeternity_client as ae
-import state as db
-from models import Account, Position, OpenPositionRequest
+# Import from same directory (api/) using relative imports
+from . import aeternity_client as ae
+from . import state as db
+from .models import Account, Position, OpenPositionRequest
 
 app = FastAPI()
 
