@@ -114,20 +114,61 @@ export const connectSuperheroWallet = async (): Promise<WalletInfo> => {
     const sdk = initSdk();
 
     // Connect to wallet using the CORRECT method
-    const { networkId } = await sdk.connectToWallet(superhero.getConnection());
+    const connectionInfo = await sdk.connectToWallet(superhero.getConnection());
+    console.log('Connection info:', connectionInfo);
+    console.log('Connection info keys:', Object.keys(connectionInfo));
 
-    // Get current address
-    const addresses = sdk.addresses();
-    const address = addresses[0];
+    // After connection, addresses should be available
+    console.log('sdk.addresses type:', typeof sdk.addresses);
+    console.log('sdk.address type:', typeof sdk.address);
+
+    // Get the current address
+    let address: string | undefined;
+
+    // Try to get the current address - sdk.address is a getter
+    try {
+      address = sdk.address;
+      console.log('Got address via sdk.address:', address);
+    } catch (e) {
+      console.log('sdk.address failed:', e);
+    }
+
+    // If address is still undefined, try addresses
+    if (!address) {
+      try {
+        // Check if addresses is a function or a getter
+        const addrsFunc = sdk.addresses;
+        console.log('sdk.addresses:', addrsFunc);
+
+        // addresses appears to be a getter that returns a function that returns addresses
+        if (typeof addrsFunc === 'function') {
+          const addrs = addrsFunc();
+          console.log('Calling sdk.addresses() returned:', addrs);
+          if (addrs && addrs.length > 0) {
+            address = addrs[0];
+            console.log('Got address from addresses[0]:', address);
+          }
+        }
+      } catch (e) {
+        console.log('Error with addresses:', e);
+      }
+    }
 
     if (!address) {
+      console.error('Could not find address. SDK state:', {
+        address: sdk.address,
+        addressesType: typeof sdk.addresses,
+        connectionInfo
+      });
       throw new Error('Could not get wallet address from Superhero Wallet');
     }
 
+    const networkId = connectionInfo.networkId || 'ae_mainnet';
+
     console.log('Connected to wallet:', address, 'on network:', networkId);
 
-    // Get balance
-    const balanceResponse = await sdk.getBalance(address);
+    // Get balance - cast address to the expected type
+    const balanceResponse = await sdk.getBalance(address as `ak_${string}`);
     const balanceInAE = Number(balanceResponse) / 1e18; // Convert from aettos to AE
 
     return {
