@@ -56,18 +56,21 @@ def get_account(address: str) -> Account | None:
 
 def save_account(account: Account) -> bool:
     """Saves an account to Vercel KV or local memory."""
+    print(f"[STATE] Saving account {account.address} with {len(account.positions)} positions")
     if USING_KV:
         try:
             # Convert account to JSON string for storage
             account_json = account.model_dump_json()
             kv.set(account.address, account_json)
+            print(f"[STATE] ✓ Saved to KV")
             return True
         except Exception as e:
-            print(f"Error saving account to KV: {e}")
+            print(f"[STATE] ✗ Error saving account to KV: {e}")
             return False
     else:
         # Local development fallback
         ACCOUNTS_DB[account.address] = account
+        print(f"[STATE] ✓ Saved to memory")
         return True
 
 def delete_account(address: str) -> bool:
