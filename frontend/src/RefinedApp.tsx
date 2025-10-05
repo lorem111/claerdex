@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
 import { Wallet, BarChart3, TrendingUp, TrendingDown, Activity } from 'lucide-react';
 import TradingChart from '@/components/TradingChart';
 
@@ -99,8 +99,8 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [isConnecting, setIsConnecting] = useState(false);
   const toast = useToast();
 
-  // Fetch account state from backend
-  const refreshAccountState = async () => {
+  // Fetch account state from backend - memoized to prevent infinite re-renders
+  const refreshAccountState = useCallback(async () => {
     if (!account) return;
 
     try {
@@ -116,7 +116,7 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       console.error('Failed to fetch account state:', error);
       // Don't show error toast on periodic refresh failures
     }
-  };
+  }, [account]);
 
   const connectWallet = async () => {
     setIsConnecting(true);
@@ -750,13 +750,19 @@ export default function RefinedApp() {
 
   // Sync backend positions to local positions for display
   useEffect(() => {
-    if (backendPositions.length === 0) return;
-
     // Convert backend positions to frontend Position type
-    const convertedPositions: Position[] = backendPositions.map(bp => {
+    // Handle both empty and non-empty arrays
+    const convertedPositions: Position[] = backendPositions.map((bp, index) => {
       const asset = ASSETS.find(a => a.id === bp.asset) || ASSETS[0];
+
+      // Generate a stable numeric ID from UUID using hash
+      // This ensures the ID is always the same for a given UUID
+      const numericId = bp.id.split('').reduce((acc, char) => {
+        return acc + char.charCodeAt(0);
+      }, 0);
+
       return {
-        id: parseInt(bp.id.split('-')[0]), // Use first part of UUID as number
+        id: numericId,
         asset: {
           ...asset,
           price: bp.current_price || currentPrices[bp.asset] || asset.price,
@@ -801,10 +807,13 @@ export default function RefinedApp() {
     if (!position) return;
 
     try {
-      // Find the backend position ID (it's a UUID string)
-      const backendPosition = backendPositions.find(bp =>
-        parseInt(bp.id.split('-')[0]) === id
-      );
+      // Find the backend position by matching the hashed numeric ID
+      const backendPosition = backendPositions.find(bp => {
+        const numericId = bp.id.split('').reduce((acc, char) => {
+          return acc + char.charCodeAt(0);
+        }, 0);
+        return numericId === id;
+      });
 
       if (!backendPosition) {
         throw new Error('Position not found in backend');
