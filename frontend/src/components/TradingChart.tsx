@@ -33,23 +33,9 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
 
   // Fetch real historical data from backend
   useEffect(() => {
-    // Generate initial placeholder data immediately for smooth UX
-    const generatePlaceholder = () => {
-      const data = [];
-      const now = Math.floor(Date.now() / 1000);
-      const startPrice = asset.price;
-
-      for (let i = 100; i >= 0; i--) {
-        data.push({
-          time: (now - i * 120) as Time,
-          value: startPrice,
-        });
-      }
-      return data;
-    };
-
-    // Set placeholder immediately
-    setHistoricalData(generatePlaceholder());
+    // Don't set placeholder - just clear old data
+    // This prevents the "2 data points" issue
+    setHistoricalData([]);
 
     // Then fetch real data
     const fetchHistoricalData = async () => {
@@ -157,7 +143,20 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
   // Update series data
   useEffect(() => {
     if (seriesRef.current && historicalData.length > 0) {
+      console.log(`Setting chart data: ${historicalData.length} points`);
+      console.log('First point:', historicalData[0]);
+      console.log('Last point:', historicalData[historicalData.length - 1]);
+
+      // Clear existing data first to prevent old data from lingering
+      seriesRef.current.setData([]);
+
+      // Set new data
       seriesRef.current.setData(historicalData);
+
+      // Fit chart to content after data is set
+      if (chartRef.current) {
+        chartRef.current.timeScale().fitContent();
+      }
     }
   }, [historicalData]);
 
