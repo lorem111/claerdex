@@ -126,17 +126,13 @@ def get_price_history(asset: str = "AE", interval: str = "1m", limit: int = 60):
     # Limit the number of data points
     limit = min(limit, 1000)
 
-    # Get current price from oracle
-    current_price = ae.get_oracle_price(asset)
-
-    # Pass current price explicitly to history function
-    history = ae.get_price_history(asset, interval, limit, current_price=current_price)
+    # Get historical data
+    history = ae.get_price_history(asset, interval, limit)
 
     return {
         "asset": asset,
         "interval": interval,
         "data": history,
-        "debug_current_price": current_price,
     }
 
 @app.get("/account/{user_address}", response_model=Account)
@@ -219,8 +215,14 @@ def close_position(user_address: str, position_id: str):
     # 1. Get closing price
     closing_price = ae.get_oracle_price(position_to_close.asset)
 
-    # 2. Calculate PnL
-    pnl_usd = (closing_price - position_to_close.entry_price) * (position_to_close.size_usd / position_to_close.entry_price)
+    # 2. Calculate PnL (different formula for LONG vs SHORT)
+    pnl_data = ae.calculate_position_pnl(
+        position_to_close.size_usd,
+        position_to_close.entry_price,
+        closing_price,
+        position_to_close.side
+    )
+    pnl_usd = pnl_data["pnl_usd"]
     pnl_ae = pnl_usd / closing_price  # Convert PnL back to AE
 
     # 3. Settle the position
