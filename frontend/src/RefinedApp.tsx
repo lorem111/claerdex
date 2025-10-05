@@ -31,6 +31,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Utilities
 import { formatUSD, formatPrice, formatPnL, formatPercentage, formatAE } from '@/utils/formatters';
+import { connectSuperheroWallet, isSuperheroWalletInstalled } from '@/utils/wallet';
 
 // TYPES
 type Asset = {
@@ -87,19 +88,64 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [account, setAccount] = useState<string | null>(null);
   const [balance, setBalance] = useState(0);
   const [isConnecting, setIsConnecting] = useState(false);
+  const toast = useToast();
 
   const connectWallet = async () => {
     setIsConnecting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    const mockAddress = "ak_2a1j2h" + Math.random().toString(36).substring(2, 10);
-    setAccount(mockAddress);
-    setBalance(1500.75);
+
+    try {
+      // Try to connect to real Superhero Wallet
+      const walletInfo = await connectSuperheroWallet();
+      setAccount(walletInfo.address);
+      setBalance(walletInfo.balance);
+
+      toast({
+        title: 'Wallet Connected!',
+        description: `Connected to ${walletInfo.address.slice(0, 10)}...`,
+        status: 'success',
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Wallet connection error:', error);
+
+      // Check if Superhero Wallet is installed
+      const hasWallet = isSuperheroWalletInstalled();
+
+      if (!hasWallet) {
+        toast({
+          title: 'Superhero Wallet Not Found',
+          description: 'Using demo mode. Install Superhero Wallet extension for real connection.',
+          status: 'info',
+          duration: 5000,
+        });
+      } else {
+        toast({
+          title: 'Connection Failed',
+          description: error instanceof Error ? error.message : 'Failed to connect wallet',
+          status: 'error',
+          duration: 5000,
+        });
+      }
+
+      // Fall back to mock wallet
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const mockAddress = "ak_demo" + Math.random().toString(36).substring(2, 10);
+      setAccount(mockAddress);
+      setBalance(1500.75);
+    }
+
     setIsConnecting(false);
   };
 
   const disconnectWallet = () => {
     setAccount(null);
     setBalance(0);
+
+    toast({
+      title: 'Wallet Disconnected',
+      status: 'info',
+      duration: 2000,
+    });
   };
 
   return (
@@ -353,6 +399,114 @@ function TradePanel({
   );
 }
 
+// PORTFOLIO VIEW
+function PortfolioView({ positions, balance }: { positions: Position[]; balance: number }) {
+  const totalPnL = positions.reduce((sum, p) => sum + p.pnl, 0);
+  const totalCollateral = positions.reduce((sum, p) => sum + p.collateral, 0);
+  const totalPositionValue = positions.reduce((sum, p) => sum + p.size, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Account Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">Account Balance</p>
+                <p className="text-2xl font-bold text-white mt-1">{formatAE(balance)}</p>
+              </div>
+              <Wallet className="w-8 h-8 text-slate-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">Total Unrealized PnL</p>
+                <p className={`text-2xl font-bold mt-1 ${totalPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {formatPnL(totalPnL)}
+                </p>
+              </div>
+              {totalPnL >= 0 ? (
+                <TrendingUp className="w-8 h-8 text-emerald-600" />
+              ) : (
+                <TrendingDown className="w-8 h-8 text-rose-600" />
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900/50 border-slate-800">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-400">Open Positions</p>
+                <p className="text-2xl font-bold text-white mt-1">{positions.length}</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {formatUSD(totalPositionValue)} total value
+                </p>
+              </div>
+              <Activity className="w-8 h-8 text-slate-600" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Positions Breakdown */}
+      <Card className="bg-slate-900/50 border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-lg font-bold text-white">Position Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {positions.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">
+              <p className="text-lg mb-2">No open positions</p>
+              <p className="text-sm">Open a position to start trading</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {positions.map(p => (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <img src={p.asset.icon} alt={p.asset.id} className="w-10 h-10 rounded-full" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-white">{p.asset.id}/USD</span>
+                        <span className={`px-2 py-0.5 text-xs font-semibold rounded ${
+                          p.side === 'LONG'
+                            ? 'bg-emerald-900/50 text-emerald-300'
+                            : 'bg-rose-900/50 text-rose-300'
+                        }`}>
+                          {p.side}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-400 mt-1">
+                        Size: {formatUSD(p.size)} • Collateral: {formatAE(p.collateral)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-lg font-bold ${p.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {formatPnL(p.pnl)}
+                    </p>
+                    <p className="text-sm text-slate-500">Entry: {formatPrice(p.entryPrice)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // POSITIONS TABLE
 function PositionsPanel({
   positions,
@@ -457,12 +611,15 @@ function PositionsPanel({
 
 // MAIN APP
 export default function RefinedApp() {
+  const toast = useToast();
+  const { balance } = useWeb3();
   const [selectedAsset, setSelectedAsset] = useState(ASSETS[0]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>(
     ASSETS.reduce((acc, asset) => ({ ...acc, [asset.id]: asset.price }), {})
   );
   const [priceChanges, setPriceChanges] = useState<Record<string, number>>({});
+  const [activeTab, setActiveTab] = useState('perpetuals');
 
   // Fetch real prices from API
   const fetchPrices = async () => {
@@ -538,7 +695,18 @@ export default function RefinedApp() {
   };
 
   const handleClosePosition = (id: number) => {
+    const position = positions.find(p => p.id === id);
+    if (!position) return;
+
     setPositions(prev => prev.filter(p => p.id !== id));
+
+    toast({
+      title: 'Position Closed',
+      description: `${position.side} ${position.asset.id} position closed. PnL: ${formatPnL(position.pnl)}`,
+      status: position.pnl >= 0 ? 'success' : 'warning',
+      duration: 4000,
+      isClosable: true,
+    });
   };
 
   return (
@@ -550,7 +718,7 @@ export default function RefinedApp() {
         {/* Navigation Tabs */}
         <div className="border-b border-slate-800 bg-slate-950/95">
           <div className="container mx-auto px-6">
-            <Tabs defaultValue="perpetuals" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="bg-transparent border-0 h-12 gap-6">
                 <TabsTrigger
                   value="spot"
@@ -582,51 +750,62 @@ export default function RefinedApp() {
         </div>
 
         <main className="container mx-auto px-6 py-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-              {/* Chart Header */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <img src={selectedAsset.icon} alt={selectedAsset.name} className="w-12 h-12 rounded-full" />
-                  <div>
-                    <h2 className="text-2xl font-bold text-white">{selectedAsset.id}/USD</h2>
-                    <p className="text-sm text-slate-400">{selectedAsset.name}</p>
+          {activeTab === 'portfolio' ? (
+            <PortfolioView positions={positions} balance={balance} />
+          ) : activeTab === 'spot' || activeTab === 'stocks' ? (
+            <div className="flex items-center justify-center h-96">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold text-white mb-2">Coming Soon</h2>
+                <p className="text-slate-400">{activeTab === 'spot' ? 'Spot' : 'Stocks'} trading will be available soon.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-6">
+                {/* Chart Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <img src={selectedAsset.icon} alt={selectedAsset.name} className="w-12 h-12 rounded-full" />
+                    <div>
+                      <h2 className="text-2xl font-bold text-white">{selectedAsset.id}/USD</h2>
+                      <p className="text-sm text-slate-400">{selectedAsset.name}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-3xl font-bold text-white">{formatPrice(currentPrices[selectedAsset.id] || selectedAsset.price)}</div>
+                    <div className={`text-sm font-semibold flex items-center justify-end gap-1 ${(priceChanges[selectedAsset.id] || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {(priceChanges[selectedAsset.id] || 0) >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                      {formatPercentage(priceChanges[selectedAsset.id] || 0)} (live)
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-3xl font-bold text-white">{formatPrice(currentPrices[selectedAsset.id] || selectedAsset.price)}</div>
-                  <div className={`text-sm font-semibold flex items-center justify-end gap-1 ${(priceChanges[selectedAsset.id] || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {(priceChanges[selectedAsset.id] || 0) >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                    {formatPercentage(priceChanges[selectedAsset.id] || 0)} (live)
-                  </div>
+
+                {/* Oracle Badge */}
+                <div className="flex items-center gap-2 text-xs text-slate-500 -mt-3">
+                  <Activity className="w-3 h-3" />
+                  <span>Live Oracle Price • Powered by Aeternity</span>
                 </div>
-              </div>
 
-              {/* Oracle Badge */}
-              <div className="flex items-center gap-2 text-xs text-slate-500 -mt-3">
-                <Activity className="w-3 h-3" />
-                <span>Live Oracle Price • Powered by Aeternity</span>
+                {/* Chart */}
+                <Card className="bg-slate-900/50 border-slate-800 shadow-xl overflow-hidden">
+                  <TradingChart
+                    asset={selectedAsset}
+                    currentPrice={currentPrices[selectedAsset.id]}
+                    positions={positions}
+                  />
+                </Card>
+                <PositionsPanel positions={positions} currentPrices={currentPrices} onClosePosition={handleClosePosition} />
               </div>
-
-              {/* Chart */}
-              <Card className="bg-slate-900/50 border-slate-800 shadow-xl overflow-hidden">
-                <TradingChart
+              <div className="lg:col-span-1">
+                <TradePanel
                   asset={selectedAsset}
+                  onAssetChange={handleAssetChange}
+                  onOpenPosition={handleOpenPosition}
                   currentPrice={currentPrices[selectedAsset.id]}
-                  positions={positions}
                 />
-              </Card>
-              <PositionsPanel positions={positions} currentPrices={currentPrices} onClosePosition={handleClosePosition} />
+              </div>
             </div>
-            <div className="lg:col-span-1">
-              <TradePanel
-                asset={selectedAsset}
-                onAssetChange={handleAssetChange}
-                onOpenPosition={handleOpenPosition}
-                currentPrice={currentPrices[selectedAsset.id]}
-              />
-            </div>
-          </div>
+          )}
         </main>
       </div>
     </Web3Provider>
