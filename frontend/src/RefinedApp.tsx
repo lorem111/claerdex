@@ -179,10 +179,13 @@ function ChartPanel({ asset, currentPrice }: { asset: Asset; currentPrice: numbe
   useEffect(() => {
     // Update last data point with live price
     setChartData(prev => {
+      if (prev.length === 0) return prev;
       const newData = [...prev];
-      if (newData.length > 0) {
-        newData[newData.length - 1].value = currentPrice;
-      }
+      // Create a new object instead of mutating
+      newData[newData.length - 1] = {
+        ...newData[newData.length - 1],
+        value: currentPrice
+      };
       return newData;
     });
   }, [currentPrice]);
