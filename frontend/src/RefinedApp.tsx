@@ -1,6 +1,8 @@
 import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
 import { Wallet, BarChart3, TrendingUp, TrendingDown, Activity } from 'lucide-react';
 import TradingChart from '@/components/TradingChart';
+import SpotTrading from '@/components/SpotTrading';
+import StocksTrading from '@/components/StocksTrading';
 
 // Chakra UI for Trade Panel
 import {
@@ -888,13 +890,30 @@ export default function RefinedApp() {
         <main className="container mx-auto px-6 py-6">
           {activeTab === 'portfolio' ? (
             <PortfolioView positions={positions} balance={balance} />
-          ) : activeTab === 'spot' || activeTab === 'stocks' ? (
-            <div className="flex items-center justify-center h-96">
-              <div className="text-center">
-                <h2 className="text-2xl font-bold text-white mb-2">Coming Soon</h2>
-                <p className="text-slate-400">{activeTab === 'spot' ? 'Spot' : 'Stocks'} trading will be available soon.</p>
-              </div>
-            </div>
+          ) : activeTab === 'spot' ? (
+            <SpotTrading
+              assets={ASSETS}
+              currentPrices={currentPrices}
+              balance={balance}
+              onTrade={(side, asset, amount, totalCost) => {
+                console.log(`[SPOT] ${side} ${amount} ${asset} for ${totalCost} USD`);
+                toast({
+                  title: `${side} Order Placed`,
+                  description: `${side === 'BUY' ? 'Bought' : 'Sold'} ${amount} ${asset} for $${totalCost.toFixed(2)}`,
+                });
+              }}
+            />
+          ) : activeTab === 'stocks' ? (
+            <StocksTrading
+              balance={balance}
+              onOpenPosition={(position) => {
+                console.log('[STOCKS] Opening position:', position);
+                toast({
+                  title: 'Position Opened',
+                  description: `${position.side} ${position.stock.symbol} with ${position.leverage}x leverage`,
+                });
+              }}
+            />
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
