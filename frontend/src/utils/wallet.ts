@@ -79,27 +79,31 @@ export const connectSuperheroWallet = async (): Promise<WalletInfo> => {
 
     console.log('Connecting to Superhero Wallet...');
 
-    // Get wallet connection
-    const walletConnection = await superhero.getConnection();
+    // Create AeSdk instance with node
+    const aeSdk = new AeSdk({
+      nodes: [{ name: 'mainnet', instance: new Node(MAINNET_NODE_URL) }],
+    });
 
-    // Subscribe to address to get current address
-    const addressSubscription = await walletConnection.request('address.subscribe', {});
-    const address = addressSubscription?.address?.current;
+    // Get wallet connection and connect to SDK
+    const walletConnection = await superhero.getConnection();
+    await aeSdk.connectToWallet(walletConnection);
+
+    console.log('Connected to wallet SDK');
+
+    // Get current address from the SDK
+    const address = await aeSdk.address();
 
     if (!address) {
       throw new Error('Could not get wallet address from Superhero Wallet');
     }
 
-    console.log('Connected to wallet:', address);
-
-    // Create AeSdk instance to fetch balance
-    const aeSdk = new AeSdk({
-      nodes: [{ name: 'mainnet', instance: new Node(MAINNET_NODE_URL) }],
-    });
+    console.log('Wallet address:', address);
 
     // Get balance
     const balanceResponse = await aeSdk.getBalance(address);
     const balanceInAE = Number(balanceResponse) / 1e18; // Convert from aettos to AE
+
+    console.log('Wallet balance:', balanceInAE, 'AE');
 
     return {
       address,

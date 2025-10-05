@@ -47,7 +47,9 @@ def get_or_create_account(address: str) -> Account:
 @app.get("/")
 def root():
     """Health check endpoint."""
-    return {"status": "ok", "service": "Claerdex Backend", "deployment": "vercel", "version": "2.0"}
+    import os
+    oracle_url_set = "ORACLE_API_URL" in os.environ
+    return {"status": "ok", "service": "Claerdex Backend", "deployment": "vercel", "version": "2.1", "oracle_configured": oracle_url_set}
 
 @app.get("/prices")
 def get_all_prices():
