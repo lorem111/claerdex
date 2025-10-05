@@ -11,7 +11,7 @@ import os
 from typing import Optional
 from models import Position
 
-# Base prices for assets (starting point)
+# Base prices for assets - will be updated with REAL live prices on startup
 BASE_PRICES = {
     "AE": 0.03,
     "BTC": 68000.0,
@@ -27,11 +27,63 @@ VOLATILITY = {
     "SOL": 0.004,   # 0.4% max change (SOL is more volatile)
 }
 
+# Track if we've fetched real prices yet
+_REAL_PRICES_LOADED = False
+
+def fetch_real_current_prices():
+    """
+    Fetch REAL current prices from CoinGecko API and update BASE_PRICES.
+    This ensures we always start with current market data, not stale placeholders.
+    """
+    global BASE_PRICES, _REAL_PRICES_LOADED
+
+    if _REAL_PRICES_LOADED:
+        return  # Already loaded real prices
+
+    try:
+        print("[PRICE INIT] Fetching REAL current prices from CoinGecko...")
+
+        # CoinGecko free API - no key needed
+        # Map our symbols to CoinGecko IDs
+        coingecko_ids = {
+            "BTC": "bitcoin",
+            "ETH": "ethereum",
+            "SOL": "solana",
+            "AE": "aeternity"
+        }
+
+        ids_param = ",".join(coingecko_ids.values())
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids_param}&vs_currencies=usd"
+
+        response = requests.get(url, timeout=10)
+
+        if response.status_code == 200:
+            data = response.json()
+
+            # Update BASE_PRICES with real current prices
+            for symbol, cg_id in coingecko_ids.items():
+                if cg_id in data and "usd" in data[cg_id]:
+                    real_price = data[cg_id]["usd"]
+                    BASE_PRICES[symbol] = real_price
+                    print(f"[PRICE INIT] ✓ {symbol}: ${real_price} (LIVE)")
+
+            _REAL_PRICES_LOADED = True
+            print(f"[PRICE INIT] ✓ Successfully loaded REAL prices: {BASE_PRICES}")
+        else:
+            print(f"[PRICE INIT] ✗ CoinGecko API returned {response.status_code}, using fallback prices")
+
+    except Exception as e:
+        print(f"[PRICE INIT] ✗ Failed to fetch real prices: {e}, using fallback prices")
+        # Continue with existing BASE_PRICES as fallback
+
 def get_oracle_price(asset: str) -> float:
     """
     Queries the Aeternity oracle for the price of an asset vs USD.
     Falls back to mock prices if oracle is unavailable.
     """
+    # Ensure we have REAL current prices loaded first
+    fetch_real_current_prices()
+
     print(f"Fetching oracle price for {asset}...")
 
     # Try to fetch from oracle API first
