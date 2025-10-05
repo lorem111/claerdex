@@ -1,7 +1,9 @@
 // Aeternity Superhero Wallet integration utilities
-//
-// NOTE: This is a basic implementation. Full wallet integration requires
-// Superhero Wallet to be installed for proper testing and refinement.
+// Based on reference implementation from dex-ui
+
+import { walletDetector, BrowserWindowMessageConnection, Node, AeSdk } from '@aeternity/aepp-sdk';
+
+const MAINNET_NODE_URL = 'https://mainnet.aeternity.io';
 
 export interface WalletInfo {
   address: string;
@@ -9,45 +11,105 @@ export interface WalletInfo {
   networkId: string;
 }
 
+interface DetectedWallet {
+  info: {
+    id: string;
+    name: string;
+    networkId: string;
+  };
+  getConnection: () => any;
+}
+
+/**
+ * Detect available wallets using the SDK's walletDetector
+ * Returns a promise that resolves when a wallet is found or times out after 5 seconds
+ */
+export const detectWallets = (): Promise<DetectedWallet[]> => {
+  return new Promise((resolve) => {
+    const wallets: DetectedWallet[] = [];
+    let stopScan: (() => void) | null = null;
+
+    // Timeout after 5 seconds
+    const timeout = setTimeout(() => {
+      stopScan?.();
+      resolve(wallets);
+    }, 5000);
+
+    // Handle wallet detection
+    const handleWallet = ({ wallets: detectedWallets }: { wallets: Record<string, DetectedWallet> }) => {
+      wallets.push(...Object.values(detectedWallets));
+      clearTimeout(timeout);
+      stopScan?.();
+      resolve(wallets);
+    };
+
+    // Start scanning for wallets
+    const scannerConnection = new BrowserWindowMessageConnection();
+    stopScan = walletDetector(scannerConnection, handleWallet);
+  });
+};
+
 /**
  * Check if Superhero Wallet extension is installed
  */
-export const isSuperheroWalletInstalled = (): boolean => {
-  // Check if we're in a browser environment
-  if (typeof window === 'undefined') return false;
-
-  // Check for Superhero Wallet in window object
-  // Superhero Wallet typically injects itself as window.Superhero or similar
-  const hasSuperhero = !!(window as any).Superhero;
-
-  // Alternative: check if page is in an iframe (wallet detection)
-  const inIframe = window.parent !== window;
-
-  return hasSuperhero || inIframe;
+export const isSuperheroWalletInstalled = async (): Promise<boolean> => {
+  const wallets = await detectWallets();
+  return wallets.some(w => w.info.name === 'Superhero');
 };
 
 /**
  * Connect to Superhero Wallet and get account info
- *
- * This will attempt to connect to a real Superhero Wallet if available.
- * The actual implementation depends on having Superhero Wallet installed.
  */
 export const connectSuperheroWallet = async (): Promise<WalletInfo> => {
-  // For now, throw an error to fall back to demo mode
-  // This will be fully implemented when we have Superhero Wallet for testing
-  throw new Error(
-    'Superhero Wallet integration requires the wallet extension to be installed. ' +
-    'Install from https://superhero.com/wallet'
-  );
+  try {
+    console.log('Detecting wallets...');
+    const wallets = await detectWallets();
 
-  // TODO: Implement real wallet connection using @aeternity/aepp-sdk
-  // when Superhero Wallet is available for testing
-  //
-  // The implementation should:
-  // 1. Use BrowserWindowMessageConnection to connect
-  // 2. Request address from wallet
-  // 3. Fetch balance using AeSdk
-  // 4. Return { address, balance, networkId }
+    if (wallets.length === 0) {
+      throw new Error('No wallets detected. Please install Superhero Wallet extension.');
+    }
+
+    console.log(`Found ${wallets.length} wallet(s):`, wallets.map(w => w.info.name));
+
+    // Find Superhero Wallet
+    const superhero = wallets.find(w => w.info.name === 'Superhero');
+    if (!superhero) {
+      throw new Error('Superhero Wallet not found. Please install it from https://superhero.com/wallet');
+    }
+
+    console.log('Connecting to Superhero Wallet...');
+
+    // Get wallet connection
+    const walletConnection = await superhero.getConnection();
+
+    // Subscribe to address to get current address
+    const addressSubscription = await walletConnection.request('address.subscribe', {});
+    const address = addressSubscription?.address?.current;
+
+    if (!address) {
+      throw new Error('Could not get wallet address from Superhero Wallet');
+    }
+
+    console.log('Connected to wallet:', address);
+
+    // Create AeSdk instance to fetch balance
+    const aeSdk = new AeSdk({
+      nodes: [{ name: 'mainnet', instance: new Node(MAINNET_NODE_URL) }],
+    });
+
+    // Get balance
+    const balanceResponse = await aeSdk.getBalance(address);
+    const balanceInAE = Number(balanceResponse) / 1e18; // Convert from aettos to AE
+
+    return {
+      address,
+      balance: balanceInAE,
+      networkId: superhero.info.networkId,
+    };
+  } catch (error) {
+    console.error('Wallet connection error:', error);
+    throw error;
+  }
 };
 
 /**

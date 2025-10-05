@@ -31,7 +31,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Utilities
 import { formatUSD, formatPrice, formatPnL, formatPercentage, formatAE } from '@/utils/formatters';
-import { connectSuperheroWallet, isSuperheroWalletInstalled } from '@/utils/wallet';
+import { connectSuperheroWallet } from '@/utils/wallet';
 
 // TYPES
 type Asset = {
@@ -108,24 +108,13 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     } catch (error) {
       console.error('Wallet connection error:', error);
 
-      // Check if Superhero Wallet is installed
-      const hasWallet = isSuperheroWalletInstalled();
-
-      if (!hasWallet) {
-        toast({
-          title: 'Superhero Wallet Not Found',
-          description: 'Using demo mode. Install Superhero Wallet extension for real connection.',
-          status: 'info',
-          duration: 5000,
-        });
-      } else {
-        toast({
-          title: 'Connection Failed',
-          description: error instanceof Error ? error.message : 'Failed to connect wallet',
-          status: 'error',
-          duration: 5000,
-        });
-      }
+      // Show error message
+      toast({
+        title: 'Connection Failed',
+        description: error instanceof Error ? error.message : 'Failed to connect wallet. Using demo mode.',
+        status: 'warning',
+        duration: 5000,
+      });
 
       // Fall back to mock wallet
       await new Promise(resolve => setTimeout(resolve, 500));
