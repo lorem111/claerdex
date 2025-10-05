@@ -28,6 +28,13 @@ RECORDED_PRICE_HISTORY = {
     "ETH": [],
     "SOL": []
 }
+# Track which assets have been loaded from KV to avoid redundant loads
+KV_LOADED = {
+    "AE": False,
+    "BTC": False,
+    "ETH": False,
+    "SOL": False
+}
 MAX_HISTORY_POINTS = 1000  # Keep last 1000 price recordings per asset
 
 def get_kv_key(asset: str) -> str:
@@ -37,7 +44,12 @@ def get_kv_key(asset: str) -> str:
 def load_history_from_kv(asset: str) -> bool:
     """Load price history from KV into memory"""
     if not KV_AVAILABLE:
+        KV_LOADED[asset] = True  # Mark as loaded even if KV unavailable
         return False
+
+    if KV_LOADED[asset]:
+        # Already loaded, skip
+        return True
 
     try:
         key = get_kv_key(asset)
@@ -51,13 +63,16 @@ def load_history_from_kv(asset: str) -> bool:
                 history = data
 
             RECORDED_PRICE_HISTORY[asset] = [tuple(point) for point in history]
+            KV_LOADED[asset] = True
             print(f"[KV LOAD] ✓ Loaded {len(RECORDED_PRICE_HISTORY[asset])} points for {asset} from KV")
             return True
         else:
             print(f"[KV LOAD] No stored history for {asset} in KV")
+            KV_LOADED[asset] = True
             return False
     except Exception as e:
         print(f"[KV LOAD] ✗ Failed to load {asset} from KV: {e}")
+        KV_LOADED[asset] = True  # Mark as loaded to avoid retry loops
         return False
 
 def save_history_to_kv(asset: str) -> bool:
@@ -85,8 +100,8 @@ def append_recorded_price(asset: str, price: float, timestamp_ms: int = None):
     if timestamp_ms is None:
         timestamp_ms = int(time.time() * 1000)
 
-    # Load from KV if we don't have data in memory (cold start)
-    if len(RECORDED_PRICE_HISTORY[asset]) == 0:
+    # Load from KV if we haven't loaded yet (cold start)
+    if not KV_LOADED[asset]:
         load_history_from_kv(asset)
 
     # Append new price
@@ -106,8 +121,9 @@ def get_recorded_history(asset: str, limit: int = 180) -> list:
     if asset not in RECORDED_PRICE_HISTORY:
         return []
 
-    # Load from KV if we don't have data in memory (cold start)
-    if len(RECORDED_PRICE_HISTORY[asset]) == 0:
+    # Load from KV if we haven't loaded yet (cold start)
+    if not KV_LOADED[asset]:
+        print(f"[HISTORY] Loading {asset} from KV (cold start)...")
         load_history_from_kv(asset)
 
     history = RECORDED_PRICE_HISTORY[asset]
