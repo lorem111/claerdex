@@ -57,16 +57,31 @@ def get_all_prices():
     """Endpoint for the frontend to get all relevant asset prices at once."""
     import time
 
-    prices = {
-        "AE": ae.get_oracle_price("AE"),
-        "BTC": ae.get_oracle_price("BTC"),
-        "ETH": ae.get_oracle_price("ETH"),
-        "SOL": ae.get_oracle_price("SOL"),
-    }
+    assets = ["AE", "BTC", "ETH", "SOL"]
+
+    # Get current prices
+    prices = {}
+    stats_24h = {}
+
+    for asset in assets:
+        prices[asset] = ae.get_oracle_price(asset)
+        stats_24h[asset] = ae.get_24h_stats(asset)
+
+    # Combine current prices with 24h statistics
+    price_data = {}
+    for asset in assets:
+        price_data[asset] = {
+            "price": prices[asset],
+            "high_24h": stats_24h[asset]["high_24h"],
+            "low_24h": stats_24h[asset]["low_24h"],
+            "open_24h": stats_24h[asset]["open_24h"],
+            "change_24h": stats_24h[asset]["change_24h"],
+            "change_percent_24h": stats_24h[asset]["change_percent_24h"],
+        }
 
     # Add metadata for the frontend
     return {
-        "prices": prices,
+        "data": price_data,
         "timestamp": int(time.time()),
         "update_interval": 5,  # Prices update every 5 seconds
     }
@@ -86,6 +101,40 @@ def get_blockchain_status():
         "explorer_url": f"https://explorer.aeternity.io/keyblock/{block_info.get('hash', '')}" if block_info.get('hash') else None
     }
 
+@app.get("/prices/history")
+def get_price_history(asset: str = "AE", interval: str = "1m", limit: int = 60):
+    """
+    Get historical price data for charting.
+
+    Args:
+        asset: Asset symbol (AE, BTC, ETH, SOL)
+        interval: Time interval (1m, 5m, 15m, 1h, 4h, 1d)
+        limit: Number of data points (max 1000)
+
+    Returns:
+        Historical OHLC price data
+    """
+    # Validate inputs
+    valid_assets = ["AE", "BTC", "ETH", "SOL"]
+    valid_intervals = ["1m", "5m", "15m", "1h", "4h", "1d"]
+
+    if asset not in valid_assets:
+        raise HTTPException(status_code=400, detail=f"Invalid asset. Must be one of: {valid_assets}")
+
+    if interval not in valid_intervals:
+        raise HTTPException(status_code=400, detail=f"Invalid interval. Must be one of: {valid_intervals}")
+
+    # Limit the number of data points
+    limit = min(limit, 1000)
+
+    history = ae.get_price_history(asset, interval, limit)
+
+    return {
+        "asset": asset,
+        "interval": interval,
+        "data": history,
+    }
+
 @app.get("/account/{user_address}", response_model=Account)
 def get_account_state(user_address: str):
     """The main data endpoint for the frontend dashboard."""
@@ -94,8 +143,19 @@ def get_account_state(user_address: str):
     # Recalculate PnL for all open positions in real-time
     for position in account.positions:
         current_price = ae.get_oracle_price(position.asset)
-        # The frontend can do PnL calculations for visual effect
-        pass
+
+        # Calculate unrealized PnL
+        pnl_data = ae.calculate_position_pnl(
+            position.size_usd,
+            position.entry_price,
+            current_price,
+            position.side
+        )
+
+        # Update position with current data
+        position.unrealized_pnl_usd = pnl_data["pnl_usd"]
+        position.unrealized_pnl_ae = pnl_data["pnl_usd"] / current_price  # Convert to AE
+        position.current_price = current_price
 
     return account
 

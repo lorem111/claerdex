@@ -90,9 +90,10 @@ If you need to add additional environment variables (like API keys):
 When deployed to Vercel, all endpoints are automatically prefixed with `/api`:
 
 - `GET /api` - Health check
-- `GET /api/prices` - Get asset prices
+- `GET /api/prices` - Get asset prices with 24h statistics
+- `GET /api/prices/history` - Get historical price data for charting
 - `GET /api/blockchain/status` - Get current blockchain status and latest block
-- `GET /api/account/{address}` - Get user account
+- `GET /api/account/{address}` - Get user account with real-time PnL
 - `POST /api/positions/open` - Open position
 - `POST /api/positions/close/{id}` - Close position
 

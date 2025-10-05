@@ -141,3 +141,187 @@ def get_latest_block() -> dict:
             "miner": "unavailable",
             "error": str(e)
         }
+
+def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list:
+    """
+    Generate historical price data for charting.
+
+    Args:
+        asset: Asset symbol (e.g., "AE", "BTC")
+        interval: Time interval ("1m", "5m", "15m", "1h", "4h", "1d")
+        limit: Number of data points to return
+
+    Returns:
+        List of price data points with timestamp and OHLC data
+    """
+    if asset not in BASE_PRICES:
+        return []
+
+    # Map intervals to seconds
+    interval_seconds = {
+        "1m": 60,
+        "5m": 300,
+        "15m": 900,
+        "1h": 3600,
+        "4h": 14400,
+        "1d": 86400,
+    }
+
+    seconds = interval_seconds.get(interval, 60)
+    current_time = int(time.time())
+
+    # Generate historical data points
+    history = []
+    for i in range(limit, 0, -1):
+        # Calculate timestamp for this data point
+        timestamp = current_time - (i * seconds)
+        interval_num = timestamp // 5  # 5-second base intervals
+
+        # Generate price using same logic as get_oracle_price but for specific time
+        random.seed(interval_num * hash(asset))
+        base_price = BASE_PRICES[asset]
+        volatility = VOLATILITY.get(asset, 0.002)
+
+        # Simulate price movement
+        cumulative_change = 0
+        temp_seed = interval_num
+        for _ in range(min(interval_num % 100, 20)):
+            random.seed(temp_seed * hash(asset))
+            cumulative_change += random.uniform(-volatility, volatility)
+            temp_seed -= 1
+
+        price = base_price * (1 + cumulative_change)
+        min_price = base_price * 0.9
+        max_price = base_price * 1.1
+        price = max(min_price, min(max_price, price))
+
+        # Round appropriately
+        if asset == "AE":
+            price = round(price, 4)
+        else:
+            price = round(price, 2)
+
+        # Generate OHLC data with slight variations
+        random.seed(interval_num * hash(asset) + 1)
+        variation = price * 0.001  # 0.1% variation for OHLC
+
+        history.append({
+            "timestamp": timestamp * 1000,  # Convert to milliseconds
+            "open": round(price - random.uniform(-variation, variation), 4 if asset == "AE" else 2),
+            "high": round(price + random.uniform(0, variation), 4 if asset == "AE" else 2),
+            "low": round(price - random.uniform(0, variation), 4 if asset == "AE" else 2),
+            "close": price,
+        })
+
+    return history
+
+def get_24h_stats(asset: str) -> dict:
+    """
+    Calculate 24-hour price statistics.
+
+    Returns:
+        Dictionary with 24h high, low, open, and change percentage
+    """
+    if asset not in BASE_PRICES:
+        return {
+            "high_24h": 0,
+            "low_24h": 0,
+            "open_24h": 0,
+            "change_24h": 0,
+            "change_percent_24h": 0,
+        }
+
+    current_price = get_oracle_price(asset)
+    current_time = int(time.time())
+    time_24h_ago = current_time - 86400  # 24 hours in seconds
+
+    # Get price from 24h ago
+    interval_24h_ago = time_24h_ago // 5
+    random.seed(interval_24h_ago * hash(asset))
+
+    base_price = BASE_PRICES[asset]
+    volatility = VOLATILITY.get(asset, 0.002)
+
+    cumulative_change = 0
+    temp_seed = interval_24h_ago
+    for _ in range(min(interval_24h_ago % 100, 20)):
+        random.seed(temp_seed * hash(asset))
+        cumulative_change += random.uniform(-volatility, volatility)
+        temp_seed -= 1
+
+    price_24h_ago = base_price * (1 + cumulative_change)
+    min_price = base_price * 0.9
+    max_price = base_price * 1.1
+    price_24h_ago = max(min_price, min(max_price, price_24h_ago))
+
+    # Calculate high and low over 24h period
+    # Sample prices every hour
+    prices_24h = []
+    for hours_ago in range(0, 25):
+        timestamp = current_time - (hours_ago * 3600)
+        interval_num = timestamp // 5
+        random.seed(interval_num * hash(asset))
+
+        cumulative_change = 0
+        temp_seed = interval_num
+        for _ in range(min(interval_num % 100, 20)):
+            random.seed(temp_seed * hash(asset))
+            cumulative_change += random.uniform(-volatility, volatility)
+            temp_seed -= 1
+
+        price = base_price * (1 + cumulative_change)
+        price = max(min_price, min(max_price, price))
+        prices_24h.append(price)
+
+    high_24h = max(prices_24h)
+    low_24h = min(prices_24h)
+
+    # Round appropriately
+    if asset == "AE":
+        high_24h = round(high_24h, 4)
+        low_24h = round(low_24h, 4)
+        price_24h_ago = round(price_24h_ago, 4)
+    else:
+        high_24h = round(high_24h, 2)
+        low_24h = round(low_24h, 2)
+        price_24h_ago = round(price_24h_ago, 2)
+
+    # Calculate change
+    change_24h = current_price - price_24h_ago
+    change_percent_24h = (change_24h / price_24h_ago * 100) if price_24h_ago != 0 else 0
+
+    return {
+        "high_24h": high_24h,
+        "low_24h": low_24h,
+        "open_24h": price_24h_ago,
+        "change_24h": round(change_24h, 4 if asset == "AE" else 2),
+        "change_percent_24h": round(change_percent_24h, 2),
+    }
+
+def calculate_position_pnl(position_size_usd: float, entry_price: float, current_price: float, side: str) -> dict:
+    """
+    Calculate unrealized PnL for a position.
+
+    Args:
+        position_size_usd: Size of position in USD
+        entry_price: Entry price
+        current_price: Current market price
+        side: "long" or "short"
+
+    Returns:
+        Dictionary with PnL in USD and percentage
+    """
+    if side == "long":
+        # Long: profit when price goes up
+        pnl_usd = (current_price - entry_price) * (position_size_usd / entry_price)
+    else:
+        # Short: profit when price goes down
+        pnl_usd = (entry_price - current_price) * (position_size_usd / entry_price)
+
+    # Calculate PnL percentage
+    pnl_percent = (pnl_usd / position_size_usd * 100) if position_size_usd != 0 else 0
+
+    return {
+        "pnl_usd": round(pnl_usd, 2),
+        "pnl_percent": round(pnl_percent, 2),
+    }

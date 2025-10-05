@@ -65,16 +65,30 @@ The API will be available at `http://localhost:8000`
 Health check endpoint
 
 ### `GET /prices` (or `/api/prices` on Vercel)
-Get current prices for all supported assets (AE, BTC, ETH, SOL). Prices update every 5 seconds with realistic random movements.
+Get current prices for all supported assets with 24-hour statistics. Prices update every 5 seconds with realistic random movements.
 
 **Response:**
 ```json
 {
-  "prices": {
-    "AE": 0.0302,
-    "BTC": 68156.42,
-    "ETH": 3487.91,
-    "SOL": 151.34
+  "data": {
+    "AE": {
+      "price": 0.0302,
+      "high_24h": 0.0315,
+      "low_24h": 0.0289,
+      "open_24h": 0.0298,
+      "change_24h": 0.0004,
+      "change_percent_24h": 2.15
+    },
+    "BTC": {
+      "price": 68156.42,
+      "high_24h": 69000.0,
+      "low_24h": 67500.0,
+      "open_24h": 67800.0,
+      "change_24h": 356.42,
+      "change_percent_24h": 0.53
+    },
+    "ETH": { "..." },
+    "SOL": { "..." }
   },
   "timestamp": 1696531200,
   "update_interval": 5
@@ -82,6 +96,34 @@ Get current prices for all supported assets (AE, BTC, ETH, SOL). Prices update e
 ```
 
 **Note:** Prices currently use mock data with random movements. Real oracle integration coming soon.
+
+### `GET /prices/history` (or `/api/prices/history` on Vercel)
+Get historical price data for charting.
+
+**Query Parameters:**
+- `asset` - Asset symbol (AE, BTC, ETH, SOL). Default: "AE"
+- `interval` - Time interval (1m, 5m, 15m, 1h, 4h, 1d). Default: "1m"
+- `limit` - Number of data points (max 1000). Default: 60
+
+**Example:** `/api/prices/history?asset=AE&interval=1h&limit=100`
+
+**Response:**
+```json
+{
+  "asset": "AE",
+  "interval": "1h",
+  "data": [
+    {
+      "timestamp": 1696527600000,
+      "open": 0.0301,
+      "high": 0.0305,
+      "low": 0.0299,
+      "close": 0.0302
+    },
+    { "..." }
+  ]
+}
+```
 
 ### `GET /blockchain/status` (or `/api/blockchain/status` on Vercel)
 Get current Aeternity blockchain status and latest block information.
@@ -103,7 +145,7 @@ Get current Aeternity blockchain status and latest block information.
 ```
 
 ### `GET /account/{user_address}` (or `/api/account/{user_address}` on Vercel)
-Get account state for a user including balance and open positions
+Get account state for a user including balance and open positions with real-time PnL
 
 **Response:**
 ```json
@@ -111,9 +153,25 @@ Get account state for a user including balance and open positions
   "address": "ak_...",
   "on_chain_balance_ae": 1000.0,
   "available_collateral_ae": 900.0,
-  "positions": [...]
+  "positions": [
+    {
+      "id": "uuid-here",
+      "asset": "AE",
+      "side": "short",
+      "size_usd": 34.99,
+      "collateral_ae": 100.0,
+      "leverage": 10.0,
+      "entry_price": 0.034993,
+      "liquidation_price": 0.03145,
+      "current_price": 0.03494,
+      "unrealized_pnl_usd": 0.01,
+      "unrealized_pnl_ae": 0.000286
+    }
+  ]
 }
 ```
+
+**Note:** Unrealized PnL is calculated in real-time based on current market prices.
 
 ### `POST /positions/open` (or `/api/positions/open` on Vercel)
 Open a new perpetual futures position

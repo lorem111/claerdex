@@ -1,7 +1,7 @@
 # Using Pydantic for clear, validated data models
 
 from pydantic import BaseModel
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 class Position(BaseModel):
     id: str  # A unique ID for the position, e.g., a UUID
@@ -12,6 +12,9 @@ class Position(BaseModel):
     leverage: float
     entry_price: float
     liquidation_price: float
+    unrealized_pnl_usd: Optional[float] = 0.0  # Calculated in real-time
+    unrealized_pnl_ae: Optional[float] = 0.0  # PnL in AE tokens
+    current_price: Optional[float] = None  # Current market price (for frontend display)
 
 class Account(BaseModel):
     address: str
