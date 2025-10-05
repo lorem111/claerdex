@@ -2,11 +2,21 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
 import time
+import json
 
 # Import from same directory (api/) using relative imports
 from . import aeternity_client as ae
 from . import state as db
 from .models import Account, Position, OpenPositionRequest
+
+# Import Vercel KV
+try:
+    from vercel_kv import kv
+    KV_AVAILABLE = True
+    print("[KV] ✓ Vercel KV available")
+except ImportError:
+    KV_AVAILABLE = False
+    print("[KV] ✗ Vercel KV not available, using in-memory storage")
 
 app = FastAPI()
 
@@ -20,13 +30,64 @@ RECORDED_PRICE_HISTORY = {
 }
 MAX_HISTORY_POINTS = 1000  # Keep last 1000 price recordings per asset
 
+def get_kv_key(asset: str) -> str:
+    """Generate KV key for price history"""
+    return f"price_history:{asset}"
+
+def load_history_from_kv(asset: str) -> bool:
+    """Load price history from KV into memory"""
+    if not KV_AVAILABLE:
+        return False
+
+    try:
+        key = get_kv_key(asset)
+        data = kv.get(key)
+
+        if data:
+            # Parse JSON if it's a string
+            if isinstance(data, str):
+                history = json.loads(data)
+            else:
+                history = data
+
+            RECORDED_PRICE_HISTORY[asset] = [tuple(point) for point in history]
+            print(f"[KV LOAD] ✓ Loaded {len(RECORDED_PRICE_HISTORY[asset])} points for {asset} from KV")
+            return True
+        else:
+            print(f"[KV LOAD] No stored history for {asset} in KV")
+            return False
+    except Exception as e:
+        print(f"[KV LOAD] ✗ Failed to load {asset} from KV: {e}")
+        return False
+
+def save_history_to_kv(asset: str) -> bool:
+    """Save price history from memory to KV"""
+    if not KV_AVAILABLE:
+        return False
+
+    try:
+        key = get_kv_key(asset)
+        history = RECORDED_PRICE_HISTORY[asset]
+
+        # Convert to JSON-serializable format
+        kv.set(key, json.dumps(history))
+        print(f"[KV SAVE] ✓ Saved {len(history)} points for {asset} to KV")
+        return True
+    except Exception as e:
+        print(f"[KV SAVE] ✗ Failed to save {asset} to KV: {e}")
+        return False
+
 def append_recorded_price(asset: str, price: float, timestamp_ms: int = None):
-    """Record a price point to our ongoing history"""
+    """Record a price point to our ongoing history and persist to KV"""
     if asset not in RECORDED_PRICE_HISTORY:
         return
 
     if timestamp_ms is None:
         timestamp_ms = int(time.time() * 1000)
+
+    # Load from KV if we don't have data in memory (cold start)
+    if len(RECORDED_PRICE_HISTORY[asset]) == 0:
+        load_history_from_kv(asset)
 
     # Append new price
     RECORDED_PRICE_HISTORY[asset].append((timestamp_ms, price))
@@ -35,12 +96,19 @@ def append_recorded_price(asset: str, price: float, timestamp_ms: int = None):
     if len(RECORDED_PRICE_HISTORY[asset]) > MAX_HISTORY_POINTS:
         RECORDED_PRICE_HISTORY[asset] = RECORDED_PRICE_HISTORY[asset][-MAX_HISTORY_POINTS:]
 
+    # Save to KV every time (ensures persistence)
+    save_history_to_kv(asset)
+
     print(f"[PRICE RECORD] {asset}: ${price} recorded (total: {len(RECORDED_PRICE_HISTORY[asset])} points)")
 
 def get_recorded_history(asset: str, limit: int = 180) -> list:
     """Get recorded price history in OHLC format"""
     if asset not in RECORDED_PRICE_HISTORY:
         return []
+
+    # Load from KV if we don't have data in memory (cold start)
+    if len(RECORDED_PRICE_HISTORY[asset]) == 0:
+        load_history_from_kv(asset)
 
     history = RECORDED_PRICE_HISTORY[asset]
     if not history:
@@ -66,16 +134,23 @@ def get_recorded_history(asset: str, limit: int = 180) -> list:
     return ohlc_data
 
 def initialize_price_history():
-    """Seed initial price history from CoinGecko if we have no recorded data"""
+    """Load price history from KV or seed from CoinGecko if needed"""
     assets = ["AE", "BTC", "ETH", "SOL"]
 
-    print("[HISTORY INIT] Checking if we need to seed initial price history...")
+    print("[HISTORY INIT] Initializing price history...")
     for asset in assets:
+        # Skip if already in memory
         if len(RECORDED_PRICE_HISTORY[asset]) > 0:
-            print(f"[HISTORY INIT] ✓ {asset} already has {len(RECORDED_PRICE_HISTORY[asset])} recorded points, skipping seed")
+            print(f"[HISTORY INIT] ✓ {asset} already has {len(RECORDED_PRICE_HISTORY[asset])} points in memory")
             continue
 
-        print(f"[HISTORY INIT] Seeding initial history for {asset}...")
+        # Try to load from KV first
+        if load_history_from_kv(asset):
+            print(f"[HISTORY INIT] ✓ Loaded {asset} from KV, skipping seed")
+            continue
+
+        # No data in KV - seed from CoinGecko
+        print(f"[HISTORY INIT] No KV data for {asset}, seeding from CoinGecko...")
         try:
             # Fetch initial data from CoinGecko or fallback
             history = ae.get_price_history(asset, "1m", 180)
@@ -83,7 +158,10 @@ def initialize_price_history():
                 # Convert to our format and store
                 for point in history:
                     RECORDED_PRICE_HISTORY[asset].append((point["timestamp"], point["close"]))
-                print(f"[HISTORY INIT] ✓ Seeded {len(history)} points for {asset}")
+
+                # Save to KV for future cold starts
+                save_history_to_kv(asset)
+                print(f"[HISTORY INIT] ✓ Seeded {len(history)} points for {asset} and saved to KV")
             else:
                 print(f"[HISTORY INIT] ✗ No seed data for {asset}")
             # Small delay to avoid rate limiting
