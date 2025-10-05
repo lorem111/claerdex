@@ -128,6 +128,62 @@ def get_blockchain_status():
         "explorer_url": f"https://explorer.aeternity.io/keyblock/{block_info.get('hash', '')}" if block_info.get('hash') else None
     }
 
+@app.get("/debug/coingecko")
+def debug_coingecko():
+    """
+    Debug endpoint to test CoinGecko connectivity from Vercel.
+    """
+    import requests
+    import traceback
+
+    results = {}
+
+    # Test 1: Simple price fetch
+    try:
+        url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Accept': 'application/json',
+        }
+        response = requests.get(url, headers=headers, timeout=15)
+        results['simple_price'] = {
+            'status_code': response.status_code,
+            'data': response.json() if response.status_code == 200 else response.text[:200],
+            'success': response.status_code == 200
+        }
+    except Exception as e:
+        results['simple_price'] = {
+            'error': str(e),
+            'traceback': traceback.format_exc(),
+            'success': False
+        }
+
+    # Test 2: Market chart fetch (the one that's failing)
+    try:
+        url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+        params = {'vs_currency': 'usd', 'days': 1}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Accept': 'application/json',
+        }
+        response = requests.get(url, params=params, headers=headers, timeout=15)
+        data = response.json() if response.status_code == 200 else response.text[:200]
+        results['market_chart'] = {
+            'status_code': response.status_code,
+            'has_prices': 'prices' in data if isinstance(data, dict) else False,
+            'price_count': len(data.get('prices', [])) if isinstance(data, dict) else 0,
+            'sample_data': data if response.status_code != 200 else f"Got {len(data.get('prices', []))} prices",
+            'success': response.status_code == 200
+        }
+    except Exception as e:
+        results['market_chart'] = {
+            'error': str(e),
+            'traceback': traceback.format_exc(),
+            'success': False
+        }
+
+    return results
+
 @app.get("/prices/history")
 def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: int = 60):
     """
