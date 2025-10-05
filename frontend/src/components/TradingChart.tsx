@@ -223,51 +223,83 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
 
   // Update series data
   useEffect(() => {
-    if (seriesRef.current && historicalData.length > 0) {
-      console.log(`Setting chart data: ${historicalData.length} points`);
-      console.log('First point:', historicalData[0]);
-      console.log('Last point:', historicalData[historicalData.length - 1]);
+    if (!seriesRef.current || !historicalData || historicalData.length === 0) {
+      console.log('[CHART] Skipping setData - no series or no data');
+      return;
+    }
 
-      try {
-        // Validate, sort, and deduplicate all data points before setting
-        const validData = historicalData
-          .filter(point => {
-            return point &&
-                   typeof point.time === 'number' &&
-                   typeof point.value === 'number' &&
-                   !isNaN(point.value) &&
-                   point.value !== null &&
-                   point.value > 0;
-          })
-          .sort((a, b) => a.time - b.time) // Ensure ascending order
-          .filter((point, index, arr) => {
-            // Remove duplicates - lightweight-charts doesn't allow duplicate times
-            if (index === 0) return true;
-            return point.time !== arr[index - 1].time;
-          });
+    console.log(`[CHART] Setting chart data: ${historicalData.length} points`);
+    console.log('[CHART] First point:', historicalData[0]);
+    console.log('[CHART] Last point:', historicalData[historicalData.length - 1]);
 
-        if (validData.length === 0) {
-          console.error('[CHART] No valid data points to set!');
-          return;
-        }
+    try {
+      // Validate, sort, and deduplicate all data points before setting
+      const validData = historicalData
+        .filter(point => {
+          const isValid = point &&
+                 typeof point.time === 'number' &&
+                 typeof point.value === 'number' &&
+                 !isNaN(point.value) &&
+                 point.value !== null &&
+                 point.value !== undefined &&
+                 point.value > 0 &&
+                 point.time > 0;
 
-        console.log(`[CHART] Setting ${validData.length} valid sorted points`);
-        console.log(`[CHART] Time range: ${validData[0].time} → ${validData[validData.length - 1].time}`);
+          if (!isValid) {
+            console.warn('[CHART] ⚠️ Filtering out invalid point:', point);
+          }
+          return isValid;
+        })
+        .sort((a, b) => a.time - b.time) // Ensure ascending order
+        .filter((point, index, arr) => {
+          // Remove duplicates - lightweight-charts doesn't allow duplicate times
+          if (index === 0) return true;
+          if (point.time === arr[index - 1].time) {
+            console.warn(`[CHART] ⚠️ Removing duplicate timestamp: ${point.time}`);
+            return false;
+          }
+          return true;
+        });
 
-        // Clear existing data first to prevent old data from lingering
-        seriesRef.current.setData([]);
-
-        // Set new data
-        seriesRef.current.setData(validData);
-
-        // Fit chart to content after data is set
-        if (chartRef.current) {
-          chartRef.current.timeScale().fitContent();
-        }
-      } catch (error) {
-        console.error('[CHART] Error setting chart data:', error);
-        console.error('[CHART] Problematic data:', historicalData);
+      if (validData.length === 0) {
+        console.error('[CHART] ✗ No valid data points to set after filtering!');
+        return;
       }
+
+      console.log(`[CHART] ✓ Setting ${validData.length} valid sorted points`);
+      console.log(`[CHART] ✓ Time range: ${validData[0].time} → ${validData[validData.length - 1].time}`);
+      console.log(`[CHART] ✓ Value range: $${validData[0].value} → $${validData[validData.length - 1].value}`);
+
+      // Defensive: Clear series completely before setting new data
+      try {
+        seriesRef.current.setData([]);
+      } catch (clearError) {
+        console.warn('[CHART] ⚠️ Error clearing data (continuing anyway):', clearError);
+      }
+
+      // Small delay to ensure clear completed
+      setTimeout(() => {
+        if (!seriesRef.current) return;
+
+        try {
+          // Set new data
+          seriesRef.current.setData(validData);
+
+          // Fit chart to content after data is set
+          if (chartRef.current) {
+            chartRef.current.timeScale().fitContent();
+          }
+
+          console.log('[CHART] ✓ Chart data set successfully');
+        } catch (setError) {
+          console.error('[CHART] ✗ CRITICAL ERROR setting chart data:', setError);
+          console.error('[CHART] ✗ Data that caused error:', validData.slice(0, 5), '...', validData.slice(-5));
+        }
+      }, 10);
+
+    } catch (error) {
+      console.error('[CHART] ✗ Error in setData useEffect:', error);
+      console.error('[CHART] ✗ Original data:', historicalData.slice(0, 5));
     }
   }, [historicalData]);
 
@@ -282,12 +314,21 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
     }
 
     const now = Math.floor(Date.now() / 1000) as Time;
+
+    // Check if this timestamp already exists in our data (would cause duplicate error)
+    const lastPoint = historicalData[historicalData.length - 1];
+    if (lastPoint && lastPoint.time === now) {
+      // Skip update - same timestamp as last point
+      return;
+    }
+
     const newDataPoint = { time: now, value: currentPrice };
 
     try {
       seriesRef.current.update(newDataPoint);
     } catch (error) {
-      console.error('[CHART] Error updating live price:', error, newDataPoint);
+      console.error('[CHART] ✗ Error updating live price:', error, newDataPoint);
+      console.error('[CHART] ✗ Last historical point:', lastPoint);
     }
   }, [currentPrice, historicalData]);
 
