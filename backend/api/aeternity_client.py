@@ -190,6 +190,7 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
 
     # Get current REAL price from oracle
     current_price = get_oracle_price(asset)
+    print(f"[Historical Data] Using current oracle price for {asset}: ${current_price}")
 
     # Set volatility based on asset
     volatility = VOLATILITY.get(asset, 0.002)
