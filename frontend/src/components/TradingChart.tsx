@@ -48,13 +48,28 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
 
         // INSTANT LOAD: Try cache first for instant chart display
         const cached = getCachedChart(asset.id, timeframe);
-        if (cached) {
+        if (cached && cached.data) {
           console.log(`[CHART] ⚡ INSTANT load from cache for ${asset.id} (${timeframe})`);
-          const chartData = cached.data.map((point: any) => ({
-            time: Math.floor(point.timestamp / 1000) as Time,
-            value: point.close,
-          }));
-          setHistoricalData(chartData);
+          // Filter and convert cached data
+          const chartData = cached.data
+            .filter((point: any) => {
+              return point &&
+                     typeof point.timestamp === 'number' &&
+                     point.timestamp > 0 &&
+                     typeof point.close === 'number' &&
+                     !isNaN(point.close) &&
+                     point.close > 0;
+            })
+            .map((point: any) => ({
+              time: Math.floor(point.timestamp / 1000) as Time,
+              value: point.close,
+            }));
+
+          if (chartData.length > 0) {
+            setHistoricalData(chartData);
+          } else {
+            setHistoricalData([]);
+          }
         } else {
           // Clear old data if no cache
           setHistoricalData([]);
@@ -80,13 +95,33 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         cacheChart(asset.id, timeframe, result.data);
 
         console.log(`[CHART] ✓ Received ${result.data.length} REAL data points for ${asset.id} (${timeframe})`);
-        console.log(`[CHART] Price range: $${result.data[0].close} → $${result.data[result.data.length - 1].close}`);
 
-        // Convert backend format to chart format
-        const chartData = result.data.map((point: any) => ({
-          time: Math.floor(point.timestamp / 1000) as Time,
-          value: point.close,
-        }));
+        // Convert backend format to chart format and filter out invalid data
+        const chartData = result.data
+          .filter((point: any) => {
+            // Filter out points with invalid values
+            if (!point || typeof point.timestamp !== 'number' || point.timestamp <= 0) {
+              console.warn('[CHART] ⚠️ Skipping point with invalid timestamp:', point);
+              return false;
+            }
+            if (typeof point.close !== 'number' || point.close === null || isNaN(point.close) || point.close <= 0) {
+              console.warn('[CHART] ⚠️ Skipping point with invalid close price:', point);
+              return false;
+            }
+            return true;
+          })
+          .map((point: any) => ({
+            time: Math.floor(point.timestamp / 1000) as Time,
+            value: point.close,
+          }));
+
+        if (chartData.length === 0) {
+          console.error('[CHART] ✗ No valid data points after filtering!');
+          return;
+        }
+
+        console.log(`[CHART] ✓ ${chartData.length} valid points after filtering`);
+        console.log(`[CHART] Price range: $${chartData[0].value} → $${chartData[chartData.length - 1].value}`);
 
         setHistoricalData(chartData);
         console.log(`[CHART] ✓ Chart updated with fresh backend data for ${asset.id} (${timeframe})`);
@@ -177,15 +212,36 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
       console.log('First point:', historicalData[0]);
       console.log('Last point:', historicalData[historicalData.length - 1]);
 
-      // Clear existing data first to prevent old data from lingering
-      seriesRef.current.setData([]);
+      try {
+        // Validate all data points before setting
+        const validData = historicalData.filter(point => {
+          return point &&
+                 typeof point.time === 'number' &&
+                 typeof point.value === 'number' &&
+                 !isNaN(point.value) &&
+                 point.value !== null;
+        });
 
-      // Set new data
-      seriesRef.current.setData(historicalData);
+        if (validData.length === 0) {
+          console.error('[CHART] No valid data points to set!');
+          return;
+        }
 
-      // Fit chart to content after data is set
-      if (chartRef.current) {
-        chartRef.current.timeScale().fitContent();
+        console.log(`[CHART] Setting ${validData.length} valid points`);
+
+        // Clear existing data first to prevent old data from lingering
+        seriesRef.current.setData([]);
+
+        // Set new data
+        seriesRef.current.setData(validData);
+
+        // Fit chart to content after data is set
+        if (chartRef.current) {
+          chartRef.current.timeScale().fitContent();
+        }
+      } catch (error) {
+        console.error('[CHART] Error setting chart data:', error);
+        console.error('[CHART] Problematic data:', historicalData);
       }
     }
   }, [historicalData]);
@@ -194,10 +250,20 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
   useEffect(() => {
     if (!seriesRef.current || historicalData.length === 0) return;
 
+    // Validate current price before updating
+    if (typeof currentPrice !== 'number' || isNaN(currentPrice) || currentPrice <= 0) {
+      console.warn('[CHART] Skipping live update - invalid price:', currentPrice);
+      return;
+    }
+
     const now = Math.floor(Date.now() / 1000) as Time;
     const newDataPoint = { time: now, value: currentPrice };
 
-    seriesRef.current.update(newDataPoint);
+    try {
+      seriesRef.current.update(newDataPoint);
+    } catch (error) {
+      console.error('[CHART] Error updating live price:', error, newDataPoint);
+    }
   }, [currentPrice, historicalData]);
 
   // Draw position lines
