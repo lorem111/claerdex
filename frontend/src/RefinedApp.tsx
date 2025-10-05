@@ -1,6 +1,6 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Wallet, TrendingUp, TrendingDown, Activity, BarChart3 } from 'lucide-react';
+import { Wallet, BarChart3 } from 'lucide-react';
+import TradingChart from '@/components/TradingChart';
 
 // Chakra UI for Trade Panel
 import {
@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { Toaster } from "@/components/ui/toaster";
 
 // Utilities
-import { formatUSD, formatPrice, formatPnL, formatPercentage, formatAE } from '@/utils/formatters';
+import { formatUSD, formatPrice, formatPnL, formatAE } from '@/utils/formatters';
 
 // TYPES
 type Asset = {
@@ -67,21 +67,7 @@ const ASSETS: Asset[] = [
   { id: 'SOL', name: 'Solana', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png', price: 165.21, change: 3.89 },
 ];
 
-const generateChartData = (basePrice: number) => {
-  let data = [];
-  let value = basePrice;
-  for (let i = 0; i < 30; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() - (30 - i));
-    const volatility = basePrice * 0.02; // 2% volatility
-    value += (Math.random() - 0.5) * volatility;
-    data.push({
-      name: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      value: value
-    });
-  }
-  return data;
-};
+// Chart data generation moved to TradingChart component
 
 // WEB3 CONTEXT
 const Web3Context = createContext<Web3ContextType>({
@@ -166,98 +152,7 @@ function Header() {
   );
 }
 
-// CHART & STATS COMPONENT
-function ChartPanel({ asset, currentPrice }: { asset: Asset; currentPrice: number }) {
-  const [chartData, setChartData] = useState(generateChartData(asset.price));
-
-  useEffect(() => {
-    // Generate new chart data when asset changes
-    const newData = generateChartData(asset.price);
-    setChartData(newData);
-  }, [asset]);
-
-  useEffect(() => {
-    // Update last data point with live price
-    setChartData(prev => {
-      if (prev.length === 0) return prev;
-      const newData = [...prev];
-      // Create a new object instead of mutating
-      newData[newData.length - 1] = {
-        ...newData[newData.length - 1],
-        value: currentPrice
-      };
-      return newData;
-    });
-  }, [currentPrice]);
-
-  return (
-    <Card className="bg-slate-900/50 border-slate-800 shadow-xl">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={asset.icon} alt={asset.name} className="w-10 h-10 rounded-full" />
-            <div>
-              <CardTitle className="text-2xl font-bold text-white">{asset.id}/USD</CardTitle>
-              <p className="text-sm text-slate-400">{asset.name}</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="text-3xl font-bold text-white">{formatPrice(currentPrice)}</div>
-            <div className={`text-sm font-semibold flex items-center justify-end gap-1 ${asset.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {asset.change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              {formatPercentage(asset.change)} (24h)
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 flex items-center gap-2 text-xs text-slate-500">
-          <Activity className="w-3 h-3" />
-          <span>Live Oracle Price • Powered by Aeternity</span>
-        </div>
-      </CardHeader>
-      <CardContent className="pb-6">
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={asset.change >= 0 ? "#10B981" : "#F43F5E"} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={asset.change >= 0 ? "#10B981" : "#F43F5E"} stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <YAxis
-                stroke="#64748b"
-                tickFormatter={(value) => formatPrice(value)}
-                style={{ fontSize: '12px' }}
-              />
-              <XAxis
-                dataKey="name"
-                stroke="#64748b"
-                style={{ fontSize: '12px' }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#1e293b',
-                  border: '1px solid #334155',
-                  borderRadius: '8px',
-                  fontSize: '12px'
-                }}
-                labelStyle={{ color: '#cbd5e1' }}
-              />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke={asset.change >= 0 ? "#10B981" : "#F43F5E"}
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorGradient)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+// Chart component moved to TradingChart.tsx
 
 // CHAKRA TRADE PANEL (Refactored with collateral input)
 function TradePanel({
@@ -559,7 +454,13 @@ export default function RefinedApp() {
         <main className="container mx-auto px-6 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <ChartPanel asset={selectedAsset} currentPrice={currentPrices[selectedAsset.id]} />
+              <Card className="bg-slate-900/50 border-slate-800 shadow-xl overflow-hidden">
+                <TradingChart
+                  asset={selectedAsset}
+                  currentPrice={currentPrices[selectedAsset.id]}
+                  positions={positions}
+                />
+              </Card>
               <PositionsPanel positions={positions} currentPrices={currentPrices} />
             </div>
             <div className="lg:col-span-1">

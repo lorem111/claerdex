@@ -1,0 +1,218 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { createChart, IChartApi, ISeriesApi, LineStyle, Time } from 'lightweight-charts';
+import { formatPrice } from '@/utils/formatters';
+
+type Position = {
+  id: number;
+  asset: { id: string; name: string; icon: string; price: number; change: number };
+  side: 'LONG' | 'SHORT';
+  size: number;
+  collateral: number;
+  entryPrice: number;
+  liqPrice: number;
+  pnl: number;
+};
+
+interface TradingChartProps {
+  asset: {
+    id: string;
+    name: string;
+    icon: string;
+    price: number;
+    change: number;
+  };
+  currentPrice: number;
+  positions: Position[];
+}
+
+const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positions }) => {
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const [historicalData, setHistoricalData] = useState<Array<{ time: Time; value: number }>>([]);
+
+  // Generate initial historical data
+  useEffect(() => {
+    const generateHistoricalData = () => {
+      const data = [];
+      const now = Math.floor(Date.now() / 1000);
+      let price = asset.price;
+
+      // Generate 100 data points (past ~3 hours at 2min intervals)
+      for (let i = 100; i >= 0; i--) {
+        const volatility = asset.price * 0.002; // 0.2% volatility
+        price += (Math.random() - 0.5) * volatility;
+        data.push({
+          time: (now - i * 120) as Time, // 2 min intervals
+          value: price,
+        });
+      }
+      return data;
+    };
+
+    setHistoricalData(generateHistoricalData());
+  }, [asset]);
+
+  // Initialize chart
+  useEffect(() => {
+    if (!chartContainerRef.current) return;
+
+    const chart = createChart(chartContainerRef.current, {
+      layout: {
+        background: { color: 'transparent' },
+        textColor: '#94a3b8',
+      },
+      grid: {
+        vertLines: { color: 'rgba(148, 163, 184, 0.1)' },
+        horzLines: { color: 'rgba(148, 163, 184, 0.1)' },
+      },
+      rightPriceScale: {
+        borderColor: '#334155',
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.1,
+        },
+      },
+      timeScale: {
+        borderColor: '#334155',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      crosshair: {
+        mode: 1,
+        vertLine: {
+          width: 1,
+          color: '#64748b',
+          style: LineStyle.Dashed,
+        },
+        horzLine: {
+          width: 1,
+          color: '#64748b',
+          style: LineStyle.Dashed,
+        },
+      },
+    });
+
+    const series = chart.addAreaSeries({
+      topColor: asset.change >= 0 ? 'rgba(16, 185, 129, 0.4)' : 'rgba(244, 63, 94, 0.4)',
+      bottomColor: asset.change >= 0 ? 'rgba(16, 185, 129, 0.0)' : 'rgba(244, 63, 94, 0.0)',
+      lineColor: asset.change >= 0 ? '#10b981' : '#f43f5e',
+      lineWidth: 2,
+    });
+
+    chartRef.current = chart;
+    seriesRef.current = series;
+
+    // Fit content
+    chart.timeScale().fitContent();
+
+    // Handle resize
+    const handleResize = () => {
+      if (chartContainerRef.current) {
+        chart.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
+        });
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      chart.remove();
+    };
+  }, [asset]);
+
+  // Update series data
+  useEffect(() => {
+    if (seriesRef.current && historicalData.length > 0) {
+      seriesRef.current.setData(historicalData);
+    }
+  }, [historicalData]);
+
+  // Update with live price
+  useEffect(() => {
+    if (!seriesRef.current || historicalData.length === 0) return;
+
+    const now = Math.floor(Date.now() / 1000) as Time;
+    const newDataPoint = { time: now, value: currentPrice };
+
+    seriesRef.current.update(newDataPoint);
+  }, [currentPrice, historicalData]);
+
+  // Draw position lines
+  useEffect(() => {
+    if (!chartRef.current || !seriesRef.current) return;
+
+    // Remove existing price lines (we'll redraw them)
+    // Note: lightweight-charts doesn't have a direct way to remove all lines,
+    // so we store refs to them if needed. For simplicity, we recreate on position change.
+
+    positions.forEach((position) => {
+      // Entry price line
+      const entryLine = seriesRef.current!.createPriceLine({
+        price: position.entryPrice,
+        color: position.side === 'LONG' ? '#10b981' : '#f43f5e',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: `${position.side} ${position.asset.id}`,
+      });
+
+      // Liquidation price line
+      const liqLine = seriesRef.current!.createPriceLine({
+        price: position.liqPrice,
+        color: '#ef4444',
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: 'Liq',
+      });
+    });
+  }, [positions]);
+
+  return (
+    <div className="relative">
+      {/* Chart Header */}
+      <div className="absolute top-4 left-4 z-10 bg-slate-900/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-slate-700">
+        <div className="flex items-center gap-3">
+          <img src={asset.icon} alt={asset.name} className="w-8 h-8 rounded-full" />
+          <div>
+            <h3 className="text-lg font-bold text-white">{asset.id}/USD</h3>
+            <p className="text-xs text-slate-400">{asset.name}</p>
+          </div>
+        </div>
+        <div className="mt-2 flex items-baseline gap-3">
+          <span className="text-2xl font-bold text-white">{formatPrice(currentPrice)}</span>
+          <span className={`text-sm font-semibold ${asset.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
+          </span>
+        </div>
+      </div>
+
+      {/* Position Legend */}
+      {positions.length > 0 && (
+        <div className="absolute top-4 right-4 z-10 bg-slate-900/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-700 max-w-xs">
+          <p className="text-xs text-slate-400 mb-1">Active Positions</p>
+          {positions.map((pos) => (
+            <div key={pos.id} className="flex items-center gap-2 text-xs mb-1">
+              <div className={`w-2 h-2 rounded-full ${pos.side === 'LONG' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+              <span className="text-slate-300">
+                {pos.side} {pos.asset.id} @ {formatPrice(pos.entryPrice)}
+              </span>
+              <span className={pos.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                {pos.pnl >= 0 ? '+' : ''}{pos.pnl.toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Chart Container */}
+      <div ref={chartContainerRef} className="w-full h-full" style={{ minHeight: '500px' }} />
+    </div>
+  );
+};
+
+export default TradingChart;
