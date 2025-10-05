@@ -1,9 +1,10 @@
 // Aeternity Superhero Wallet integration utilities
 // Based on reference implementation from dex-ui
 
-import { walletDetector, BrowserWindowMessageConnection, Node, AeSdk } from '@aeternity/aepp-sdk';
+import { walletDetector, BrowserWindowMessageConnection, Node, AeSdkAepp } from '@aeternity/aepp-sdk';
 
 const MAINNET_NODE_URL = 'https://mainnet.aeternity.io';
+const TESTNET_NODE_URL = 'https://testnet.aeternity.io';
 
 export interface WalletInfo {
   address: string;
@@ -19,6 +20,35 @@ interface DetectedWallet {
   };
   getConnection: () => any;
 }
+
+// Global SDK instance to maintain connection
+let aeSdkInstance: AeSdkAepp | null = null;
+
+/**
+ * Initialize AeSdkAepp for wallet connections
+ */
+const initSdk = (): AeSdkAepp => {
+  if (!aeSdkInstance) {
+    aeSdkInstance = new AeSdkAepp({
+      name: 'Claerdex',
+      nodes: [
+        { name: 'mainnet', instance: new Node(MAINNET_NODE_URL) },
+        { name: 'testnet', instance: new Node(TESTNET_NODE_URL) },
+      ],
+      onNetworkChange: ({ networkId }) => {
+        console.log('Network changed to:', networkId);
+      },
+      onAddressChange: ({ current }) => {
+        const [address] = Object.keys(current);
+        console.log('Address changed to:', address);
+      },
+      onDisconnect: () => {
+        console.log('Wallet disconnected');
+      },
+    });
+  }
+  return aeSdkInstance;
+};
 
 /**
  * Detect available wallets using the SDK's walletDetector
@@ -59,6 +89,7 @@ export const isSuperheroWalletInstalled = async (): Promise<boolean> => {
 
 /**
  * Connect to Superhero Wallet and get account info
+ * Uses the CORRECT method from dex-ui reference implementation
  */
 export const connectSuperheroWallet = async (): Promise<WalletInfo> => {
   try {
@@ -79,32 +110,33 @@ export const connectSuperheroWallet = async (): Promise<WalletInfo> => {
 
     console.log('Connecting to Superhero Wallet...');
 
-    // Get wallet connection
-    const walletConnection = await superhero.getConnection();
+    // Initialize SDK
+    const sdk = initSdk();
 
-    // Subscribe to address to get current address
-    const addressSubscription = await walletConnection.request('address.subscribe', {});
-    const address = addressSubscription?.address?.current;
+    // Connect to wallet using the CORRECT method
+    const { networkId } = await sdk.connectToWallet(superhero.getConnection());
+
+    // Subscribe to address changes
+    await sdk.subscribeAddress('subscribe', 'connected');
+
+    // Get current address
+    const addresses = sdk.addresses();
+    const address = addresses[0];
 
     if (!address) {
       throw new Error('Could not get wallet address from Superhero Wallet');
     }
 
-    console.log('Connected to wallet:', address);
-
-    // Create AeSdk instance to fetch balance
-    const aeSdk = new AeSdk({
-      nodes: [{ name: 'mainnet', instance: new Node(MAINNET_NODE_URL) }],
-    });
+    console.log('Connected to wallet:', address, 'on network:', networkId);
 
     // Get balance
-    const balanceResponse = await aeSdk.getBalance(address);
+    const balanceResponse = await sdk.getBalance(address);
     const balanceInAE = Number(balanceResponse) / 1e18; // Convert from aettos to AE
 
     return {
       address,
       balance: balanceInAE,
-      networkId: superhero.info.networkId,
+      networkId,
     };
   } catch (error) {
     console.error('Wallet connection error:', error);
