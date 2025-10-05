@@ -136,7 +136,18 @@ def root():
     """Health check endpoint."""
     import os
     oracle_url_set = "ORACLE_API_URL" in os.environ
-    return {"status": "ok", "service": "Claerdex Backend", "deployment": "vercel", "version": "2.1", "oracle_configured": oracle_url_set}
+
+    # Show how much recorded history we have
+    history_counts = {asset: len(RECORDED_PRICE_HISTORY[asset]) for asset in RECORDED_PRICE_HISTORY}
+
+    return {
+        "status": "ok",
+        "service": "Claerdex Backend",
+        "deployment": "vercel",
+        "version": "2.2",
+        "oracle_configured": oracle_url_set,
+        "recorded_history_points": history_counts
+    }
 
 @app.get("/prices")
 def get_all_prices():
@@ -319,13 +330,18 @@ def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: i
     # Limit the number of data points
     limit = min(limit, 1000)
 
+    # Check if we have any recorded history - if not, initialize
+    if len(RECORDED_PRICE_HISTORY[asset]) == 0:
+        print(f"[HISTORY ENDPOINT] No recorded data for {asset}, initializing...")
+        initialize_price_history()
+
     # Use our recorded price history as the source of truth
     history = get_recorded_history(asset, limit)
 
     if history:
         print(f"[HISTORY ENDPOINT] ✓ Returning {len(history)} recorded points for {asset}")
     else:
-        print(f"[HISTORY ENDPOINT] ⚠️  No recorded history for {asset} yet (frontend hasn't polled /prices enough)")
+        print(f"[HISTORY ENDPOINT] ⚠️  No recorded history for {asset} yet")
 
     return {
         "asset": asset,
