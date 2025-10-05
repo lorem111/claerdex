@@ -27,6 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Toaster } from "@/components/ui/toaster";
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Utilities
 import { formatUSD, formatPrice, formatPnL, formatPercentage, formatAE } from '@/utils/formatters';
@@ -59,12 +60,15 @@ type Web3ContextType = {
   disconnectWallet: () => void;
 };
 
-// MOCK DATA
+// API Configuration
+const PRICE_API_URL = 'https://claerdex-backend.vercel.app/prices';
+
+// ASSETS (price will be fetched from API)
 const ASSETS: Asset[] = [
-  { id: 'AE', name: 'Aeternity', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1700.png', price: 0.035, change: 2.15 },
-  { id: 'BTC', name: 'Bitcoin', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1.png', price: 68420.50, change: -1.23 },
-  { id: 'ETH', name: 'Ethereum', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png', price: 3560.78, change: 0.45 },
-  { id: 'SOL', name: 'Solana', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png', price: 165.21, change: 3.89 },
+  { id: 'AE', name: 'Aeternity', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1700.png', price: 0.03, change: 0 },
+  { id: 'BTC', name: 'Bitcoin', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1.png', price: 68000, change: 0 },
+  { id: 'ETH', name: 'Ethereum', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png', price: 3500, change: 0 },
+  { id: 'SOL', name: 'Solana', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png', price: 165.21, change: 0 },
 ];
 
 // Chart data generation moved to TradingChart component
@@ -341,7 +345,15 @@ function TradePanel({
 }
 
 // POSITIONS TABLE
-function PositionsPanel({ positions, currentPrices }: { positions: Position[]; currentPrices: Record<string, number> }) {
+function PositionsPanel({
+  positions,
+  currentPrices,
+  onClosePosition
+}: {
+  positions: Position[];
+  currentPrices: Record<string, number>;
+  onClosePosition: (id: number) => void;
+}) {
   const [livePositions, setLivePositions] = useState(positions);
 
   useEffect(() => {
@@ -380,12 +392,13 @@ function PositionsPanel({ positions, currentPrices }: { positions: Position[]; c
               <TableHead className="text-slate-400">Entry Price</TableHead>
               <TableHead className="text-slate-400">Liq. Price</TableHead>
               <TableHead className="text-right text-slate-400">Unrealized PnL</TableHead>
+              <TableHead className="text-right text-slate-400">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {livePositions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-slate-500 py-8">
+                <TableCell colSpan={7} className="text-center text-slate-500 py-8">
                   No open positions. Open a position to get started.
                 </TableCell>
               </TableRow>
@@ -413,6 +426,16 @@ function PositionsPanel({ positions, currentPrices }: { positions: Position[]; c
                   <TableCell className={`text-right font-mono font-semibold ${p.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {formatPnL(p.pnl)}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onClosePosition(p.id)}
+                      className="text-rose-400 border-rose-800 hover:bg-rose-900/20 hover:text-rose-300"
+                    >
+                      Close
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -430,26 +453,49 @@ export default function RefinedApp() {
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>(
     ASSETS.reduce((acc, asset) => ({ ...acc, [asset.id]: asset.price }), {})
   );
+  const [priceChanges, setPriceChanges] = useState<Record<string, number>>({});
 
-  // Live price feed simulation
-  useEffect(() => {
-    const priceInterval = setInterval(() => {
-      setCurrentPrices(prev => {
-        const newPrices = { ...prev };
-        for (const asset of ASSETS) {
-          const volatility = 0.0005; // 0.05% volatility per tick
-          newPrices[asset.id] *= 1 + (Math.random() - 0.5) * volatility;
-        }
-        return newPrices;
+  // Fetch real prices from API
+  const fetchPrices = async () => {
+    try {
+      const response = await fetch(PRICE_API_URL);
+      const data = await response.json();
+
+      // Calculate 24h change based on price difference
+      setPriceChanges(prev => {
+        const changes: Record<string, number> = {};
+        Object.keys(data).forEach(assetId => {
+          const oldPrice = currentPrices[assetId] || data[assetId];
+          const newPrice = data[assetId];
+          const percentChange = ((newPrice - oldPrice) / oldPrice) * 100;
+          // Smooth out the change calculation
+          changes[assetId] = prev[assetId] ? (prev[assetId] * 0.9 + percentChange * 0.1) : 0;
+        });
+        return changes;
       });
-    }, 2000); // Update every 2 seconds
+
+      setCurrentPrices(data);
+    } catch (error) {
+      console.error('Failed to fetch prices:', error);
+    }
+  };
+
+  // Fetch prices on mount and every 5 seconds
+  useEffect(() => {
+    fetchPrices(); // Initial fetch
+    const priceInterval = setInterval(fetchPrices, 5000); // Update every 5 seconds
     return () => clearInterval(priceInterval);
   }, []);
 
   const handleAssetChange = (assetId: string) => {
     const asset = ASSETS.find(a => a.id === assetId);
     if (asset) {
-      setSelectedAsset(asset);
+      // Update asset with current price
+      setSelectedAsset({
+        ...asset,
+        price: currentPrices[assetId] || asset.price,
+        change: priceChanges[assetId] || 0,
+      });
     }
   };
 
@@ -472,11 +518,50 @@ export default function RefinedApp() {
     setPositions(prev => [...prev, newPosition]);
   };
 
+  const handleClosePosition = (id: number) => {
+    setPositions(prev => prev.filter(p => p.id !== id));
+  };
+
   return (
     <Web3Provider>
       <Toaster />
       <div className="min-h-screen bg-slate-950 text-slate-100">
         <Header />
+
+        {/* Navigation Tabs */}
+        <div className="border-b border-slate-800 bg-slate-950/95">
+          <div className="container mx-auto px-6">
+            <Tabs defaultValue="perpetuals" className="w-full">
+              <TabsList className="bg-transparent border-0 h-12 gap-6">
+                <TabsTrigger
+                  value="spot"
+                  className="bg-transparent border-b-2 border-transparent data-[state=active]:border-purple-500 data-[state=active]:bg-transparent rounded-none px-4 text-slate-400 data-[state=active]:text-white font-medium"
+                >
+                  Spot
+                </TabsTrigger>
+                <TabsTrigger
+                  value="stocks"
+                  className="bg-transparent border-b-2 border-transparent data-[state=active]:border-purple-500 data-[state=active]:bg-transparent rounded-none px-4 text-slate-400 data-[state=active]:text-white font-medium"
+                >
+                  Stocks
+                </TabsTrigger>
+                <TabsTrigger
+                  value="perpetuals"
+                  className="bg-transparent border-b-2 border-transparent data-[state=active]:border-purple-500 data-[state=active]:bg-transparent rounded-none px-4 text-slate-400 data-[state=active]:text-white font-medium"
+                >
+                  Perpetuals
+                </TabsTrigger>
+                <TabsTrigger
+                  value="portfolio"
+                  className="bg-transparent border-b-2 border-transparent data-[state=active]:border-purple-500 data-[state=active]:bg-transparent rounded-none px-4 text-slate-400 data-[state=active]:text-white font-medium"
+                >
+                  Portfolio
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
+
         <main className="container mx-auto px-6 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
@@ -490,10 +575,10 @@ export default function RefinedApp() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-3xl font-bold text-white">{formatPrice(currentPrices[selectedAsset.id])}</div>
-                  <div className={`text-sm font-semibold flex items-center justify-end gap-1 ${selectedAsset.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {selectedAsset.change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                    {formatPercentage(selectedAsset.change)} (24h)
+                  <div className="text-3xl font-bold text-white">{formatPrice(currentPrices[selectedAsset.id] || selectedAsset.price)}</div>
+                  <div className={`text-sm font-semibold flex items-center justify-end gap-1 ${(priceChanges[selectedAsset.id] || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {(priceChanges[selectedAsset.id] || 0) >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                    {formatPercentage(priceChanges[selectedAsset.id] || 0)} (live)
                   </div>
                 </div>
               </div>
@@ -512,7 +597,7 @@ export default function RefinedApp() {
                   positions={positions}
                 />
               </Card>
-              <PositionsPanel positions={positions} currentPrices={currentPrices} />
+              <PositionsPanel positions={positions} currentPrices={currentPrices} onClosePosition={handleClosePosition} />
             </div>
             <div className="lg:col-span-1">
               <TradePanel
