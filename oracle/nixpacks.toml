@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs", "npm"]
+
+[phases.install]
+cmds = ["cd oracle && npm install"]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "cd oracle && npm start"
