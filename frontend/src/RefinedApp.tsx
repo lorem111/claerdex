@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { Wallet, BarChart3 } from 'lucide-react';
+import { Wallet, BarChart3, TrendingUp, TrendingDown, Activity } from 'lucide-react';
 import TradingChart from '@/components/TradingChart';
 
 // Chakra UI for Trade Panel
@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { Toaster } from "@/components/ui/toaster";
 
 // Utilities
-import { formatUSD, formatPrice, formatPnL, formatAE } from '@/utils/formatters';
+import { formatUSD, formatPrice, formatPnL, formatPercentage, formatAE } from '@/utils/formatters';
 
 // TYPES
 type Asset = {
@@ -454,6 +454,31 @@ export default function RefinedApp() {
         <main className="container mx-auto px-6 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
+              {/* Chart Header */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <img src={selectedAsset.icon} alt={selectedAsset.name} className="w-12 h-12 rounded-full" />
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">{selectedAsset.id}/USD</h2>
+                    <p className="text-sm text-slate-400">{selectedAsset.name}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-3xl font-bold text-white">{formatPrice(currentPrices[selectedAsset.id])}</div>
+                  <div className={`text-sm font-semibold flex items-center justify-end gap-1 ${selectedAsset.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {selectedAsset.change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                    {formatPercentage(selectedAsset.change)} (24h)
+                  </div>
+                </div>
+              </div>
+
+              {/* Oracle Badge */}
+              <div className="flex items-center gap-2 text-xs text-slate-500 -mt-3">
+                <Activity className="w-3 h-3" />
+                <span>Live Oracle Price • Powered by Aeternity</span>
+              </div>
+
+              {/* Chart */}
               <Card className="bg-slate-900/50 border-slate-800 shadow-xl overflow-hidden">
                 <TradingChart
                   asset={selectedAsset}

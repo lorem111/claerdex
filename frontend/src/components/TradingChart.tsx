@@ -174,23 +174,6 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
 
   return (
     <div className="relative">
-      {/* Chart Header */}
-      <div className="absolute top-4 left-4 z-10 bg-slate-900/80 backdrop-blur-sm px-4 py-2 rounded-lg border border-slate-700">
-        <div className="flex items-center gap-3">
-          <img src={asset.icon} alt={asset.name} className="w-8 h-8 rounded-full" />
-          <div>
-            <h3 className="text-lg font-bold text-white">{asset.id}/USD</h3>
-            <p className="text-xs text-slate-400">{asset.name}</p>
-          </div>
-        </div>
-        <div className="mt-2 flex items-baseline gap-3">
-          <span className="text-2xl font-bold text-white">{formatPrice(currentPrice)}</span>
-          <span className={`text-sm font-semibold ${asset.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}%
-          </span>
-        </div>
-      </div>
-
       {/* Position Legend */}
       {positions.length > 0 && (
         <div className="absolute top-4 right-4 z-10 bg-slate-900/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-700 max-w-xs">

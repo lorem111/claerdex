@@ -5,22 +5,31 @@ Backend API for the Claerdex perpetual futures decentralized exchange.
 ## Architecture
 
 - **Framework**: FastAPI
-- **Database**: In-memory Python dictionary (hackathon-ready, no DB setup needed)
+- **Database**: Vercel KV (Redis) for production, in-memory fallback for local dev
 - **Blockchain**: Aeternity (for price oracles and trade auditing)
 - **Model**: Hybrid - Python for logic, Aeternity for trust
+- **Deployment**: Serverless functions on Vercel
 
 ## Project Structure
 
 ```
-claerdex-backend/
-├── main.py                 # FastAPI application and API endpoints
+backend/
+├── api/
+│   └── index.py            # FastAPI app (serverless entry point)
 ├── aeternity_client.py     # Blockchain interaction layer
-├── state.py                # In-memory state management
+├── state.py                # Vercel KV storage adapter
 ├── models.py               # Pydantic data models
-└── requirements.txt        # Python dependencies
+├── requirements.txt        # Python dependencies
+├── vercel.json            # Vercel configuration
+├── .vercelignore          # Deployment exclusions
+├── main.py                # Legacy local dev file
+├── DEPLOYMENT.md          # Deployment guide
+└── README.md              # This file
 ```
 
-## Setup
+## Quick Start
+
+### Local Development
 
 1. Install dependencies:
 ```bash
@@ -29,17 +38,33 @@ pip install -r requirements.txt
 
 2. Run the server:
 ```bash
+# Option 1: New structure (recommended)
+uvicorn api.index:app --reload --host 0.0.0.0 --port 8000
+
+# Option 2: Legacy file (if you prefer)
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The API will be available at `http://localhost:8000`
 
+### Production Deployment
+
+**Deploy to Vercel in 3 steps:**
+
+1. Create a Vercel KV database in your dashboard (Storage → Create → KV)
+2. Import your GitHub repo at [vercel.com/new](https://vercel.com/new)
+3. Connect the KV database to your project
+
+📖 **See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions**
+
 ## API Endpoints
 
-### `GET /`
+**Note:** When deployed to Vercel, all endpoints are prefixed with `/api` (e.g., `/api/prices`)
+
+### `GET /` (or `/api` on Vercel)
 Health check endpoint
 
-### `GET /prices`
+### `GET /prices` (or `/api/prices` on Vercel)
 Get current prices for all supported assets (AE, BTC, ETH)
 
 **Response:**
@@ -51,7 +76,7 @@ Get current prices for all supported assets (AE, BTC, ETH)
 }
 ```
 
-### `GET /account/{user_address}`
+### `GET /account/{user_address}` (or `/api/account/{user_address}` on Vercel)
 Get account state for a user including balance and open positions
 
 **Response:**
@@ -64,7 +89,7 @@ Get account state for a user including balance and open positions
 }
 ```
 
-### `POST /positions/open`
+### `POST /positions/open` (or `/api/positions/open` on Vercel)
 Open a new perpetual futures position
 
 **Request Body:**
@@ -87,7 +112,7 @@ Open a new perpetual futures position
 }
 ```
 
-### `POST /positions/close/{position_id}?user_address=ak_...`
+### `POST /positions/close/{position_id}?user_address=ak_...` (or `/api/positions/close/{position_id}` on Vercel)
 Close an existing position
 
 **Response:**
@@ -105,8 +130,9 @@ Close an existing position
 
 ## Next Steps
 
-1. Replace mock oracle prices with real Aeternity oracle integration
-2. Implement actual smart contract interaction in `aeternity_client.py`
-3. Add persistent database (PostgreSQL, MongoDB, etc.)
+1. ✅ **Deploy to Vercel** - See [DEPLOYMENT.md](DEPLOYMENT.md)
+2. Replace mock oracle prices with real Aeternity oracle integration
+3. Implement actual smart contract interaction in `aeternity_client.py`
 4. Implement liquidation engine
 5. Add WebSocket support for real-time price updates
+6. Set up monitoring and error tracking (Sentry, LogRocket, etc.)
