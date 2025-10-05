@@ -62,6 +62,7 @@ type Web3ContextType = {
   balance: number;
   availableCollateral: number;
   backendPositions: BackendPosition[];
+  networkId: string; // 'ae_mainnet' or 'ae_uat'
   isConnecting: boolean;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
@@ -88,6 +89,7 @@ const Web3Context = createContext<Web3ContextType>({
   balance: 0,
   availableCollateral: 0,
   backendPositions: [],
+  networkId: 'ae_mainnet',
   isConnecting: false,
   connectWallet: async () => {},
   disconnectWallet: () => {},
@@ -99,6 +101,7 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [balance, setBalance] = useState(0);
   const [availableCollateral, setAvailableCollateral] = useState(0);
   const [backendPositions, setBackendPositions] = useState<BackendPosition[]>([]);
+  const [networkId, setNetworkId] = useState<string>('ae_mainnet');
   const [isConnecting, setIsConnecting] = useState(false);
   const toast = useToast();
 
@@ -134,6 +137,9 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       const walletInfo = await connectSuperheroWallet();
       setAccount(walletInfo.address);
       setBalance(walletInfo.balance);
+      setNetworkId(walletInfo.networkId);
+
+      console.log('[WALLET] Connected to network:', walletInfo.networkId);
 
       toast({
         title: 'Wallet Connected!',
@@ -214,6 +220,7 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       balance,
       availableCollateral,
       backendPositions,
+      networkId,
       isConnecting,
       connectWallet,
       disconnectWallet,
@@ -228,9 +235,8 @@ const useWeb3 = () => useContext(Web3Context);
 
 // HEADER COMPONENT
 function Header() {
-  const { account, balance, isConnecting, connectWallet, disconnectWallet } = useWeb3();
+  const { account, balance, networkId, isConnecting, connectWallet, disconnectWallet } = useWeb3();
   const [currentBlock, setCurrentBlock] = useState(0);
-  const [network, setNetwork] = useState<'mainnet' | 'testnet'>('mainnet');
 
   // Fetch block number from API
   useEffect(() => {
@@ -280,18 +286,15 @@ function Header() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Network Toggle */}
+            {/* Network Indicator (read-only - controlled by wallet) */}
             <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/50 rounded-lg border border-slate-800">
               <span className="text-xs text-slate-400">Network:</span>
-              <button
-                onClick={() => setNetwork(network === 'mainnet' ? 'testnet' : 'mainnet')}
-                className="relative inline-flex items-center gap-2 px-3 py-1 rounded-md transition-all duration-200 hover:bg-slate-800"
-              >
-                <div className={`w-2 h-2 rounded-full ${network === 'mainnet' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                <span className={`text-sm font-semibold ${network === 'mainnet' ? 'text-emerald-400' : 'text-amber-400'}`}>
-                  {network === 'mainnet' ? 'Mainnet' : 'Testnet'}
+              <div className="inline-flex items-center gap-2 px-3 py-1">
+                <div className={`w-2 h-2 rounded-full ${networkId === 'ae_mainnet' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                <span className={`text-sm font-semibold ${networkId === 'ae_mainnet' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {networkId === 'ae_mainnet' ? 'Mainnet' : 'Testnet'}
                 </span>
-              </button>
+              </div>
             </div>
 
             {account && (
