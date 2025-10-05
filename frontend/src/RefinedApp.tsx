@@ -636,6 +636,7 @@ function PositionsPanel({
   const [livePositions, setLivePositions] = useState(positions);
 
   useEffect(() => {
+    console.log('[POSITIONS PANEL] Received positions prop:', positions);
     setLivePositions(positions);
   }, [positions]);
 
@@ -655,6 +656,8 @@ function PositionsPanel({
 
     return () => clearInterval(interval);
   }, [livePositions.length, currentPrices]);
+
+  console.log('[POSITIONS PANEL] Rendering with livePositions:', livePositions);
 
   return (
     <Card className="bg-slate-900/50 border-slate-800 shadow-xl">
@@ -835,6 +838,11 @@ export default function RefinedApp() {
 
   // Sync backend positions to local positions for display
   useEffect(() => {
+    console.log('[POSITIONS] Converting backend positions to frontend format:', {
+      backendPositionsCount: backendPositions.length,
+      backendPositions: backendPositions
+    });
+
     // Convert backend positions to frontend Position type
     // Handle both empty and non-empty arrays
     const convertedPositions: Position[] = backendPositions.map((bp, index) => {
@@ -846,7 +854,7 @@ export default function RefinedApp() {
         return acc + char.charCodeAt(0);
       }, 0);
 
-      return {
+      const converted = {
         id: numericId,
         asset: {
           ...asset,
@@ -859,8 +867,12 @@ export default function RefinedApp() {
         liqPrice: bp.liquidation_price,
         pnl: bp.unrealized_pnl_usd || 0,
       };
+
+      console.log('[POSITIONS] Converted position:', { backend: bp, frontend: converted });
+      return converted;
     });
 
+    console.log('[POSITIONS] Setting positions state:', convertedPositions);
     setPositions(convertedPositions);
   }, [backendPositions, currentPrices]);
 
