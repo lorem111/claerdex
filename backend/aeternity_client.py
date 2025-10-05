@@ -7,6 +7,7 @@
 import time
 import random
 import requests
+import os
 from models import Position
 
 # Base prices for assets (starting point)
@@ -27,13 +28,29 @@ VOLATILITY = {
 
 def get_oracle_price(asset: str) -> float:
     """
-    Queries the public Aeternity oracle for the price of an asset vs USD.
-
-    Currently returns mock prices that update every 5 seconds with random movements.
-    This will be replaced with real oracle data later.
+    Queries the Aeternity oracle for the price of an asset vs USD.
+    Falls back to mock prices if oracle is unavailable.
     """
     print(f"Fetching oracle price for {asset}...")
 
+    # Try to fetch from oracle API first
+    oracle_url = os.environ.get("ORACLE_API_URL")
+    if oracle_url:
+        try:
+            response = requests.get(f"{oracle_url}/prices", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                prices = data.get("data", {})
+
+                # Map asset names
+                if asset in prices and prices[asset] is not None:
+                    oracle_price = float(prices[asset])
+                    print(f"Got oracle price for {asset}: {oracle_price}")
+                    return oracle_price
+        except Exception as e:
+            print(f"Oracle API error: {e}, falling back to mock prices")
+
+    # Fallback to mock prices
     if asset not in BASE_PRICES:
         return 0.0
 
