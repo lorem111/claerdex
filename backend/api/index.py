@@ -320,6 +320,42 @@ def seed_history():
         "recorded_points": counts
     }
 
+@app.get("/admin/check-kv")
+def check_kv():
+    """Debug endpoint to check what's actually in KV"""
+    if not KV_AVAILABLE:
+        return {"error": "KV not available"}
+
+    results = {}
+    for asset in ["AE", "BTC", "ETH", "SOL"]:
+        try:
+            key = get_kv_key(asset)
+            data = kv.get(key)
+
+            if data:
+                if isinstance(data, str):
+                    parsed = json.loads(data)
+                else:
+                    parsed = data
+
+                results[asset] = {
+                    "exists": True,
+                    "point_count": len(parsed) if isinstance(parsed, list) else 0,
+                    "data_type": type(data).__name__,
+                    "sample": parsed[:2] if isinstance(parsed, list) and len(parsed) > 0 else None
+                }
+            else:
+                results[asset] = {"exists": False}
+        except Exception as e:
+            results[asset] = {"error": str(e)}
+
+    return {
+        "kv_available": KV_AVAILABLE,
+        "assets": results,
+        "memory_counts": {asset: len(RECORDED_PRICE_HISTORY[asset]) for asset in RECORDED_PRICE_HISTORY},
+        "kv_loaded_flags": KV_LOADED
+    }
+
 @app.get("/debug/coingecko")
 def debug_coingecko():
     """
