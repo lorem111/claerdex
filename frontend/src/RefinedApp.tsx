@@ -62,6 +62,7 @@ type Web3ContextType = {
 
 // API Configuration
 const PRICE_API_URL = 'https://claerdex-backend.vercel.app/prices';
+const BLOCKCHAIN_STATUS_URL = 'https://claerdex-backend.vercel.app/blockchain/status';
 
 // ASSETS (price will be fetched from API)
 const ASSETS: Asset[] = [
@@ -115,14 +116,22 @@ function Header() {
   const { account, balance, isConnecting, connectWallet, disconnectWallet } = useWeb3();
   const [currentBlock, setCurrentBlock] = useState(0);
 
-  // Simulate block number updates
+  // Fetch block number from API
   useEffect(() => {
-    const startBlock = 57866199;
-    setCurrentBlock(startBlock);
+    const fetchBlockNumber = async () => {
+      try {
+        const response = await fetch(BLOCKCHAIN_STATUS_URL);
+        const data = await response.json();
+        if (data.latest_block?.height) {
+          setCurrentBlock(data.latest_block.height);
+        }
+      } catch (error) {
+        console.error('Failed to fetch block number:', error);
+      }
+    };
 
-    const interval = setInterval(() => {
-      setCurrentBlock(prev => prev + 1);
-    }, 3000); // New block every 3 seconds
+    fetchBlockNumber(); // Initial fetch
+    const interval = setInterval(fetchBlockNumber, 10000); // Update every 10 seconds
 
     return () => clearInterval(interval);
   }, []);
