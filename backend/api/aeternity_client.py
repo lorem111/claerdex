@@ -239,23 +239,23 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
         return []
 
     try:
-        # Calculate how many days of history we need based on interval and limit
-        interval_seconds = {
-            "1m": 60,
-            "5m": 300,
-            "15m": 900,
-            "1h": 3600,
-            "4h": 14400,
-            "1d": 86400,
-        }
+        # For charts, we want sufficient data points
+        # CoinGecko returns different granularity based on days:
+        # - 1 day: 5-minute intervals (288 points)
+        # - 7 days: hourly (168 points)
+        # - 30+ days: daily (30+ points)
 
-        seconds_per_point = interval_seconds.get(interval, 60)
-        total_seconds = seconds_per_point * limit
-        days = max(1, total_seconds // 86400)  # Convert to days, minimum 1
+        # For most chart requests (180 points), use 1 day to get 5-min intervals
+        if limit <= 300:
+            days = 1  # Gets 5-minute data (288 points per day)
+        elif limit <= 500:
+            days = 7  # Gets hourly data (168 points)
+        else:
+            days = 30  # Gets daily data
 
         # CoinGecko free tier limits
         if days > 90:
-            days = 90  # Free tier max
+            days = 90
 
         print(f"[HISTORY] Fetching {days} days of REAL data for {asset} from CoinGecko...")
 
@@ -263,7 +263,8 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
         params = {
             "vs_currency": "usd",
             "days": days,
-            "interval": "daily" if days > 1 else "hourly"
+            # Note: CoinGecko auto-selects interval based on days parameter
+            # Don't specify interval parameter - it causes issues
         }
 
         response = requests.get(url, params=params, timeout=10)
