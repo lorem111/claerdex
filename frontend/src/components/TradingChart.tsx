@@ -33,12 +33,38 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
 
   // Fetch real historical data from backend
   useEffect(() => {
+    // Generate initial placeholder data immediately for smooth UX
+    const generatePlaceholder = () => {
+      const data = [];
+      const now = Math.floor(Date.now() / 1000);
+      const startPrice = asset.price;
+
+      for (let i = 100; i >= 0; i--) {
+        data.push({
+          time: (now - i * 120) as Time,
+          value: startPrice,
+        });
+      }
+      return data;
+    };
+
+    // Set placeholder immediately
+    setHistoricalData(generatePlaceholder());
+
+    // Then fetch real data
     const fetchHistoricalData = async () => {
       try {
+        console.log(`Fetching historical data for ${asset.id}...`);
         const response = await fetch(
           `https://claerdex-backend.vercel.app/prices/history?asset=${asset.id}&interval=1m&limit=180`
         );
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
         const result = await response.json();
+        console.log(`Received ${result.data?.length || 0} data points for ${asset.id}`);
 
         // Convert backend format to chart format
         const chartData = result.data.map((point: any) => ({
@@ -47,10 +73,10 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         }));
 
         setHistoricalData(chartData);
+        console.log(`Chart updated with real data for ${asset.id}`);
       } catch (error) {
         console.error('Failed to fetch historical data:', error);
-        // Fallback to empty data
-        setHistoricalData([]);
+        // Keep placeholder data on error
       }
     };
 
