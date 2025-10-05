@@ -34,6 +34,11 @@ module.exports = class Aeternity {
   getSecretKey = async (defaultSecretKey) => {
     if (defaultSecretKey) return defaultSecretKey;
 
+    // Check for environment variable first
+    if (process.env.ORACLE_SECRET_KEY) {
+      return process.env.ORACLE_SECRET_KEY;
+    }
+
     const keypairFile = path.resolve(__dirname, "../../.data/keypair.json");
     const persisted = await fs
       .access(keypairFile, fs.constants.F_OK)
@@ -44,6 +49,7 @@ module.exports = class Aeternity {
       return JSON.parse(await fs.readFile(keypairFile, "utf-8")).secretKey;
     } else {
       const keypair = generateKeyPair();
+      await fs.mkdir(path.dirname(keypairFile), { recursive: true }).catch(() => {});
       await fs.writeFile(keypairFile, JSON.stringify(keypair), "utf-8");
       return keypair.secretKey;
     }
