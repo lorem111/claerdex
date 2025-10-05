@@ -18,9 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Vercel serverless function handler
-from mangum import Mangum
-handler = Mangum(app)
+# Export app for Vercel (Vercel's Python runtime handles FastAPI directly)
 
 # --- HELPER FUNCTIONS ---
 def get_or_create_account(address: str) -> Account:
