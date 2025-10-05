@@ -4,15 +4,34 @@
 import os
 import json
 
-# Import will work when deployed to Vercel with KV configured
+# Import Redis for Vercel KV
 try:
-    from vercel_kv import kv
-    USING_KV = True
-except ImportError:
-    # Fallback to in-memory for local development
-    print("Warning: vercel_kv not available, using in-memory storage for local dev")
+    import redis
+    # Check if KV env vars are present
+    KV_URL = os.environ.get("KV_REST_API_URL")
+    KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
+
+    if KV_URL and KV_TOKEN:
+        # Connect to Vercel KV via Redis
+        kv = redis.from_url(
+            KV_URL,
+            password=KV_TOKEN,
+            decode_responses=True
+        )
+        # Test connection
+        kv.ping()
+        USING_KV = True
+        print("[STATE KV] ✓ Vercel KV connected successfully")
+    else:
+        USING_KV = False
+        kv = None
+        ACCOUNTS_DB = {}
+        print("[STATE KV] ✗ KV env vars not found, using in-memory storage")
+except Exception as e:
     USING_KV = False
+    kv = None
     ACCOUNTS_DB = {}
+    print(f"[STATE KV] ✗ Failed to connect to Vercel KV: {e}, using in-memory storage")
 
 from models import Account
 

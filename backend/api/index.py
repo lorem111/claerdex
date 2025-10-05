@@ -9,14 +9,33 @@ from . import aeternity_client as ae
 from . import state as db
 from .models import Account, Position, OpenPositionRequest
 
-# Import Vercel KV
+# Import Redis for Vercel KV
+import os
 try:
-    from vercel_kv import kv
-    KV_AVAILABLE = True
-    print("[KV] ✓ Vercel KV available")
-except ImportError:
+    import redis
+    # Check if KV env vars are present
+    KV_URL = os.environ.get("KV_REST_API_URL")
+    KV_TOKEN = os.environ.get("KV_REST_API_TOKEN")
+
+    if KV_URL and KV_TOKEN:
+        # Connect to Vercel KV via Redis
+        kv_client = redis.from_url(
+            KV_URL,
+            password=KV_TOKEN,
+            decode_responses=True
+        )
+        # Test connection
+        kv_client.ping()
+        KV_AVAILABLE = True
+        print("[KV] ✓ Vercel KV connected successfully")
+    else:
+        KV_AVAILABLE = False
+        kv_client = None
+        print("[KV] ✗ KV env vars not found (KV_REST_API_URL or KV_REST_API_TOKEN missing)")
+except Exception as e:
     KV_AVAILABLE = False
-    print("[KV] ✗ Vercel KV not available, using in-memory storage")
+    kv_client = None
+    print(f"[KV] ✗ Failed to connect to Vercel KV: {e}")
 
 app = FastAPI()
 
@@ -43,7 +62,7 @@ def get_kv_key(asset: str) -> str:
 
 def load_history_from_kv(asset: str) -> bool:
     """Load price history from KV into memory"""
-    if not KV_AVAILABLE:
+    if not KV_AVAILABLE or kv_client is None:
         KV_LOADED[asset] = True  # Mark as loaded even if KV unavailable
         return False
 
@@ -53,15 +72,11 @@ def load_history_from_kv(asset: str) -> bool:
 
     try:
         key = get_kv_key(asset)
-        data = kv.get(key)
+        data = kv_client.get(key)
 
         if data:
-            # Parse JSON if it's a string
-            if isinstance(data, str):
-                history = json.loads(data)
-            else:
-                history = data
-
+            # Redis returns string, parse JSON
+            history = json.loads(data)
             RECORDED_PRICE_HISTORY[asset] = [tuple(point) for point in history]
             KV_LOADED[asset] = True
             print(f"[KV LOAD] ✓ Loaded {len(RECORDED_PRICE_HISTORY[asset])} points for {asset} from KV")
@@ -77,15 +92,15 @@ def load_history_from_kv(asset: str) -> bool:
 
 def save_history_to_kv(asset: str) -> bool:
     """Save price history from memory to KV"""
-    if not KV_AVAILABLE:
+    if not KV_AVAILABLE or kv_client is None:
         return False
 
     try:
         key = get_kv_key(asset)
         history = RECORDED_PRICE_HISTORY[asset]
 
-        # Convert to JSON-serializable format
-        kv.set(key, json.dumps(history))
+        # Convert to JSON and save to Redis
+        kv_client.set(key, json.dumps(history))
         print(f"[KV SAVE] ✓ Saved {len(history)} points for {asset} to KV")
         return True
     except Exception as e:
@@ -332,20 +347,18 @@ def seed_history():
 @app.get("/admin/check-kv")
 def check_kv():
     """Debug endpoint to check what's actually in KV"""
-    if not KV_AVAILABLE:
-        return {"error": "KV not available"}
+    if not KV_AVAILABLE or kv_client is None:
+        return {"error": "KV not available", "kv_available": KV_AVAILABLE}
 
     results = {}
     for asset in ["AE", "BTC", "ETH", "SOL"]:
         try:
             key = get_kv_key(asset)
-            data = kv.get(key)
+            data = kv_client.get(key)
 
             if data:
-                if isinstance(data, str):
-                    parsed = json.loads(data)
-                else:
-                    parsed = data
+                # Redis returns string, parse JSON
+                parsed = json.loads(data)
 
                 results[asset] = {
                     "exists": True,
