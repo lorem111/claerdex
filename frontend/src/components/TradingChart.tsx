@@ -31,26 +31,30 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
   const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
   const [historicalData, setHistoricalData] = useState<Array<{ time: Time; value: number }>>([]);
 
-  // Generate initial historical data
+  // Fetch real historical data from backend
   useEffect(() => {
-    const generateHistoricalData = () => {
-      const data = [];
-      const now = Math.floor(Date.now() / 1000);
-      let price = asset.price;
+    const fetchHistoricalData = async () => {
+      try {
+        const response = await fetch(
+          `https://claerdex-backend.vercel.app/prices/history?asset=${asset.id}&interval=1m&limit=180`
+        );
+        const result = await response.json();
 
-      // Generate 100 data points (past ~3 hours at 2min intervals)
-      for (let i = 100; i >= 0; i--) {
-        const volatility = asset.price * 0.002; // 0.2% volatility
-        price += (Math.random() - 0.5) * volatility;
-        data.push({
-          time: (now - i * 120) as Time, // 2 min intervals
-          value: price,
-        });
+        // Convert backend format to chart format
+        const chartData = result.data.map((point: any) => ({
+          time: Math.floor(point.timestamp / 1000) as Time,
+          value: point.close,
+        }));
+
+        setHistoricalData(chartData);
+      } catch (error) {
+        console.error('Failed to fetch historical data:', error);
+        // Fallback to empty data
+        setHistoricalData([]);
       }
-      return data;
     };
 
-    setHistoricalData(generateHistoricalData());
+    fetchHistoricalData();
   }, [asset]);
 
   // Initialize chart
