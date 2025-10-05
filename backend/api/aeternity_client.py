@@ -214,8 +214,8 @@ def get_latest_block() -> dict:
 
 def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list:
     """
-    Generate historical price data for charting.
-    Works backwards from current real price to generate plausible historical data.
+    Fetch REAL historical price data from CoinGecko.
+    NO MORE RANDOM DATA GENERATION!
 
     Args:
         asset: Asset symbol (e.g., "AE", "BTC")
@@ -223,80 +223,85 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
         limit: Number of data points to return
 
     Returns:
-        List of price data points with timestamp and OHLC data
+        List of REAL price data points with timestamp and OHLC data from CoinGecko
     """
-    if asset not in BASE_PRICES:
-        return []
-
-    # Map intervals to seconds
-    interval_seconds = {
-        "1m": 60,
-        "5m": 300,
-        "15m": 900,
-        "1h": 3600,
-        "4h": 14400,
-        "1d": 86400,
+    # Map our assets to CoinGecko IDs
+    coingecko_ids = {
+        "BTC": "bitcoin",
+        "ETH": "ethereum",
+        "SOL": "solana",
+        "AE": "aeternity"
     }
 
-    seconds = interval_seconds.get(interval, 60)
-    current_time = int(time.time())
+    cg_id = coingecko_ids.get(asset)
+    if not cg_id:
+        print(f"[HISTORY] Unknown asset for CoinGecko: {asset}")
+        return []
 
-    # Get current REAL price from oracle
-    current_price = get_oracle_price(asset)
-    print(f"[Historical Data] Oracle returned ${current_price} for {asset}")
+    try:
+        # Calculate how many days of history we need based on interval and limit
+        interval_seconds = {
+            "1m": 60,
+            "5m": 300,
+            "15m": 900,
+            "1h": 3600,
+            "4h": 14400,
+            "1d": 86400,
+        }
 
-    # Ensure we're not using fallback BASE_PRICES
-    if current_price < BASE_PRICES.get(asset, 0) * 1.5:
-        # Might be using fallback, try oracle one more time
-        print(f"[Historical Data] Price seems low, retrying oracle...")
-        current_price = get_oracle_price(asset)
+        seconds_per_point = interval_seconds.get(interval, 60)
+        total_seconds = seconds_per_point * limit
+        days = max(1, total_seconds // 86400)  # Convert to days, minimum 1
 
-    # Set volatility based on asset
-    volatility = VOLATILITY.get(asset, 0.002)
+        # CoinGecko free tier limits
+        if days > 90:
+            days = 90  # Free tier max
 
-    # Generate historical data working BACKWARDS from current price
-    history = []
-    price = current_price
+        print(f"[HISTORY] Fetching {days} days of REAL data for {asset} from CoinGecko...")
 
-    # Work backwards through time
-    for i in range(limit):
-        # Calculate timestamp (going backwards from current time)
-        timestamp = current_time - (i * seconds)
+        url = f"https://api.coingecko.com/api/v3/coins/{cg_id}/market_chart"
+        params = {
+            "vs_currency": "usd",
+            "days": days,
+            "interval": "daily" if days > 1 else "hourly"
+        }
 
-        # Use deterministic randomness based on timestamp for consistency
-        random.seed(timestamp * hash(asset))
+        response = requests.get(url, params=params, timeout=10)
 
-        # Generate realistic price movement (slightly random walk backwards)
-        price_change = random.uniform(-volatility, volatility)
+        if response.status_code == 200:
+            data = response.json()
+            prices = data.get("prices", [])
 
-        # For the first iteration (most recent), use current price as-is
-        # For older points, walk the price backwards
-        if i > 0:
-            price = price * (1 - price_change)  # Walk backwards
+            if not prices:
+                print(f"[HISTORY] No price data from CoinGecko for {asset}")
+                return []
 
-        # Add to history (we'll reverse it later)
-        # Round appropriately (more precision for low-priced assets)
-        if asset == "AE":
-            rounded_price = round(price, 6)  # 6 decimals for smooth charts
+            # Convert to our OHLC format
+            # Since CoinGecko gives us single price points, we'll use price for all OHLC values
+            history = []
+            decimals = 6 if asset == "AE" else 2
+
+            for timestamp_ms, price in prices[-limit:]:  # Get last 'limit' points
+                rounded_price = round(price, decimals)
+                history.append({
+                    "timestamp": timestamp_ms,  # Already in milliseconds
+                    "open": rounded_price,
+                    "high": rounded_price,
+                    "low": rounded_price,
+                    "close": rounded_price,
+                })
+
+            print(f"[HISTORY] ✓ Fetched {len(history)} REAL data points for {asset} from CoinGecko")
+            print(f"[HISTORY] Price range: ${history[0]['close']} → ${history[-1]['close']}")
+            return history
+
         else:
-            rounded_price = round(price, 2)
+            print(f"[HISTORY] ✗ CoinGecko returned {response.status_code} for {asset}")
+            return []
 
-        # Generate OHLC data with slight variations
-        random.seed(timestamp * hash(asset) + 1)
-        variation = rounded_price * 0.001  # 0.1% variation for OHLC
-
-        history.append({
-            "timestamp": timestamp * 1000,  # Convert to milliseconds
-            "open": round(rounded_price - random.uniform(-variation, variation), 6 if asset == "AE" else 2),
-            "high": round(rounded_price + random.uniform(0, variation), 6 if asset == "AE" else 2),
-            "low": round(rounded_price - random.uniform(0, variation), 6 if asset == "AE" else 2),
-            "close": rounded_price,
-        })
-
-    # Reverse to get chronological order (oldest to newest)
-    history.reverse()
-
-    return history
+    except Exception as e:
+        print(f"[HISTORY] ✗ Failed to fetch from CoinGecko: {e}")
+        return []
 
 def get_24h_stats(asset: str) -> dict:
     """
