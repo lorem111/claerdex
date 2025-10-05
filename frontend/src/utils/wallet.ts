@@ -113,50 +113,21 @@ export const connectSuperheroWallet = async (): Promise<WalletInfo> => {
     // Initialize SDK
     const sdk = initSdk();
 
-    // Connect to wallet - this establishes the connection
+    // Connect to wallet - this establishes the connection but doesn't provide addresses yet
     const connectionInfo = await sdk.connectToWallet(superhero.getConnection());
     console.log('[WALLET] ✓ Connected to wallet:', connectionInfo);
 
-    // Ask wallet to subscribe/select address - this should trigger the address to be available
-    // The wallet will prompt user to select an account if needed
-    console.log('[WALLET] Requesting address subscription...');
+    // Ask for addresses - this triggers wallet permission popup
+    console.log('[WALLET] Requesting addresses from wallet...');
+    const addresses = await sdk.askAddresses();
 
-    // Create a promise that resolves when onAddressChange fires
-    const addressPromise = new Promise<string>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Timeout waiting for wallet address'));
-      }, 10000); // 10 second timeout
-
-      // Temporarily override the onAddressChange to capture the address
-      const originalCallback = (sdk as any)._options?.onAddressChange;
-      (sdk as any)._options.onAddressChange = ({ current }: any) => {
-        clearTimeout(timeout);
-        const addresses = Object.keys(current);
-        console.log('[WALLET] ✓ Address received via callback:', addresses);
-        if (addresses.length > 0) {
-          // Restore original callback
-          if (originalCallback) {
-            originalCallback({ current });
-          }
-          resolve(addresses[0]);
-        } else {
-          reject(new Error('No addresses in callback'));
-        }
-      };
-    });
-
-    // Try to get address - SDK might already have it
-    let addresses = sdk.addresses();
-    let address: string;
-
-    if (addresses && addresses.length > 0) {
-      address = addresses[0];
-      console.log('[WALLET] ✓ Got address immediately:', address);
-    } else {
-      console.log('[WALLET] Waiting for address from callback...');
-      // Wait for the onAddressChange callback
-      address = await addressPromise;
+    if (!addresses || addresses.length === 0) {
+      throw new Error('No addresses returned from wallet');
     }
+
+    const address = addresses[0];
+    console.log('[WALLET] ✓ Received addresses from wallet:', addresses);
+    console.log('[WALLET] ✓ Using address:', address);
 
     const networkId = connectionInfo.networkId || 'ae_mainnet';
 
