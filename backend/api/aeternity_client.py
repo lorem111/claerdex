@@ -55,7 +55,12 @@ def fetch_real_current_prices():
         ids_param = ",".join(coingecko_ids.values())
         url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids_param}&vs_currencies=usd"
 
-        response = requests.get(url, timeout=10)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Accept': 'application/json',
+        }
+
+        response = requests.get(url, headers=headers, timeout=15)
 
         if response.status_code == 200:
             data = response.json()
@@ -269,7 +274,13 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
         print(f"[HISTORY] 🌐 URL: {url}")
         print(f"[HISTORY] 📝 Params: {params}")
 
-        response = requests.get(url, params=params, timeout=10)
+        # Add headers to avoid being blocked as a bot
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+            'Accept': 'application/json',
+        }
+
+        response = requests.get(url, params=params, headers=headers, timeout=15)
 
         print(f"[HISTORY] 📡 Response status: {response.status_code}")
 
