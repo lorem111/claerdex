@@ -185,7 +185,7 @@ def debug_coingecko():
     return results
 
 @app.get("/prices/history")
-def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: int = 60):
+def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: int = 60, debug: bool = False):
     """
     Get historical price data for charting.
 
@@ -193,10 +193,44 @@ def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: i
         asset: Asset symbol (AE, BTC, ETH, SOL)
         interval: Time interval (1m, 5m, 15m, 1h, 4h, 1d)
         limit: Number of data points (max 1000)
+        debug: Return diagnostic information instead of data
 
     Returns:
         Historical OHLC price data
     """
+    # Debug mode: test CoinGecko connectivity
+    if debug:
+        import requests
+        import traceback
+
+        results = {}
+
+        # Test direct CoinGecko call
+        try:
+            url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+            params = {'vs_currency': 'usd', 'days': 1}
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                'Accept': 'application/json',
+            }
+            response = requests.get(url, params=params, headers=headers, timeout=15)
+            data = response.json() if response.status_code == 200 else response.text[:500]
+            results['coingecko_test'] = {
+                'status_code': response.status_code,
+                'success': response.status_code == 200,
+                'has_prices': 'prices' in data if isinstance(data, dict) else False,
+                'price_count': len(data.get('prices', [])) if isinstance(data, dict) else 0,
+                'error_message': data if response.status_code != 200 else None
+            }
+        except Exception as e:
+            results['coingecko_test'] = {
+                'error': str(e),
+                'traceback': traceback.format_exc()[-500:],
+                'success': False
+            }
+
+        return results
+
     # Validate inputs
     valid_assets = ["AE", "BTC", "ETH", "SOL"]
     valid_intervals = ["1m", "5m", "15m", "1h", "4h", "1d"]
