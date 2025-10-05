@@ -257,8 +257,6 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
         if days > 90:
             days = 90
 
-        print(f"[HISTORY] Fetching {days} days of REAL data for {asset} from CoinGecko...")
-
         url = f"https://api.coingecko.com/api/v3/coins/{cg_id}/market_chart"
         params = {
             "vs_currency": "usd",
@@ -267,14 +265,24 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
             # Don't specify interval parameter - it causes issues
         }
 
+        print(f"[HISTORY] 📊 Request: {asset} ({cg_id}), days={days}, limit={limit}")
+        print(f"[HISTORY] 🌐 URL: {url}")
+        print(f"[HISTORY] 📝 Params: {params}")
+
         response = requests.get(url, params=params, timeout=10)
+
+        print(f"[HISTORY] 📡 Response status: {response.status_code}")
 
         if response.status_code == 200:
             data = response.json()
+            print(f"[HISTORY] 📦 Response keys: {list(data.keys())}")
+
             prices = data.get("prices", [])
+            print(f"[HISTORY] 💰 Raw prices count: {len(prices)}")
 
             if not prices:
-                print(f"[HISTORY] No price data from CoinGecko for {asset}")
+                print(f"[HISTORY] ✗ No price data from CoinGecko for {asset}")
+                print(f"[HISTORY] 🔍 Full response: {data}")
                 return []
 
             # Convert to our OHLC format
@@ -293,15 +301,24 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
                 })
 
             print(f"[HISTORY] ✓ Fetched {len(history)} REAL data points for {asset} from CoinGecko")
-            print(f"[HISTORY] Price range: ${history[0]['close']} → ${history[-1]['close']}")
+            print(f"[HISTORY] 📈 Price range: ${history[0]['close']} → ${history[-1]['close']}")
             return history
 
         else:
             print(f"[HISTORY] ✗ CoinGecko returned {response.status_code} for {asset}")
+            print(f"[HISTORY] 🔍 Response text: {response.text[:500]}")
             return []
 
+    except requests.exceptions.Timeout as e:
+        print(f"[HISTORY] ⏱️ Timeout fetching from CoinGecko: {e}")
+        return []
+    except requests.exceptions.RequestException as e:
+        print(f"[HISTORY] 🌐 Network error fetching from CoinGecko: {e}")
+        return []
     except Exception as e:
-        print(f"[HISTORY] ✗ Failed to fetch from CoinGecko: {e}")
+        print(f"[HISTORY] ✗ Unexpected error: {type(e).__name__}: {e}")
+        import traceback
+        print(f"[HISTORY] 🔍 Traceback: {traceback.format_exc()}")
         return []
 
 def get_24h_stats(asset: str) -> dict:
