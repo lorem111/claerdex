@@ -18,6 +18,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Vercel serverless function handler
+from mangum import Mangum
+handler = Mangum(app)
+
 # --- HELPER FUNCTIONS ---
 def get_or_create_account(address: str) -> Account:
     """Get account from KV store or create a new one."""
@@ -223,6 +227,4 @@ def close_position(user_address: str, position_id: str):
 
     return {"message": "Position closed", "realized_pnl_ae": pnl_ae}
 
-# Vercel requires the app to be exported as 'app'
-# This handler makes it compatible with Vercel's serverless function environment
-handler = app
+# Handler is already defined at the top using Mangum
