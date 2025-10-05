@@ -50,7 +50,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         const cached = getCachedChart(asset.id, timeframe);
         if (cached && cached.data) {
           console.log(`[CHART] ⚡ INSTANT load from cache for ${asset.id} (${timeframe})`);
-          // Filter and convert cached data
+          // Filter, convert, sort, and deduplicate cached data
           const chartData = cached.data
             .filter((point: any) => {
               return point &&
@@ -63,7 +63,13 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
             .map((point: any) => ({
               time: Math.floor(point.timestamp / 1000) as Time,
               value: point.close,
-            }));
+            }))
+            .sort((a, b) => a.time - b.time) // Sort by time ascending
+            .filter((point, index, arr) => {
+              // Remove duplicates
+              if (index === 0) return true;
+              return point.time !== arr[index - 1].time;
+            });
 
           if (chartData.length > 0) {
             setHistoricalData(chartData);
@@ -113,7 +119,17 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
           .map((point: any) => ({
             time: Math.floor(point.timestamp / 1000) as Time,
             value: point.close,
-          }));
+          }))
+          .sort((a, b) => a.time - b.time) // CRITICAL: Sort by time ascending
+          .filter((point, index, arr) => {
+            // Remove duplicates - keep only first occurrence of each timestamp
+            if (index === 0) return true;
+            if (point.time === arr[index - 1].time) {
+              console.warn('[CHART] ⚠️ Removing duplicate timestamp:', point.time);
+              return false;
+            }
+            return true;
+          });
 
         if (chartData.length === 0) {
           console.error('[CHART] ✗ No valid data points after filtering!');
@@ -213,21 +229,30 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
       console.log('Last point:', historicalData[historicalData.length - 1]);
 
       try {
-        // Validate all data points before setting
-        const validData = historicalData.filter(point => {
-          return point &&
-                 typeof point.time === 'number' &&
-                 typeof point.value === 'number' &&
-                 !isNaN(point.value) &&
-                 point.value !== null;
-        });
+        // Validate, sort, and deduplicate all data points before setting
+        const validData = historicalData
+          .filter(point => {
+            return point &&
+                   typeof point.time === 'number' &&
+                   typeof point.value === 'number' &&
+                   !isNaN(point.value) &&
+                   point.value !== null &&
+                   point.value > 0;
+          })
+          .sort((a, b) => a.time - b.time) // Ensure ascending order
+          .filter((point, index, arr) => {
+            // Remove duplicates - lightweight-charts doesn't allow duplicate times
+            if (index === 0) return true;
+            return point.time !== arr[index - 1].time;
+          });
 
         if (validData.length === 0) {
           console.error('[CHART] No valid data points to set!');
           return;
         }
 
-        console.log(`[CHART] Setting ${validData.length} valid points`);
+        console.log(`[CHART] Setting ${validData.length} valid sorted points`);
+        console.log(`[CHART] Time range: ${validData[0].time} → ${validData[validData.length - 1].time}`);
 
         // Clear existing data first to prevent old data from lingering
         seriesRef.current.setData([]);
