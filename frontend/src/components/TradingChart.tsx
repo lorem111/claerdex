@@ -49,7 +49,6 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         // INSTANT LOAD: Try cache first for instant chart display
         const cached = getCachedChart(asset.id, timeframe);
         if (cached && cached.data) {
-          console.log(`[CHART] ⚡ INSTANT load from cache for ${asset.id} (${timeframe})`);
           // Filter, convert, sort, and deduplicate cached data
           const chartData = cached.data
             .filter((point: any) => {
@@ -82,7 +81,6 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         }
 
         // BACKGROUND REFRESH: Fetch fresh data
-        console.log(`[CHART] 🔄 Fetching fresh historical data for ${asset.id} (${timeframe})...`);
         const response = await fetch(
           `https://claerdex-backend.vercel.app/prices/history?asset=${asset.id}&interval=${config.interval}&limit=${config.limit}`
         );
@@ -100,21 +98,16 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         // Cache the fresh data for next instant load
         cacheChart(asset.id, timeframe, result.data);
 
-        console.log(`[CHART] ✓ Received ${result.data.length} REAL data points for ${asset.id} (${timeframe})`);
-
         // Convert backend format to chart format and filter out invalid data
         const chartData = result.data
           .filter((point: any) => {
             // Filter out points with invalid values
-            if (!point || typeof point.timestamp !== 'number' || point.timestamp <= 0) {
-              console.warn('[CHART] ⚠️ Skipping point with invalid timestamp:', point);
-              return false;
-            }
-            if (typeof point.close !== 'number' || point.close === null || isNaN(point.close) || point.close <= 0) {
-              console.warn('[CHART] ⚠️ Skipping point with invalid close price:', point);
-              return false;
-            }
-            return true;
+            return point &&
+                   typeof point.timestamp === 'number' &&
+                   point.timestamp > 0 &&
+                   typeof point.close === 'number' &&
+                   !isNaN(point.close) &&
+                   point.close > 0;
           })
           .map((point: any) => ({
             time: Math.floor(point.timestamp / 1000) as Time,
@@ -124,11 +117,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
           .filter((point: { time: Time; value: number }, index: number, arr: { time: Time; value: number }[]) => {
             // Remove duplicates - keep only first occurrence of each timestamp
             if (index === 0) return true;
-            if (point.time === arr[index - 1].time) {
-              console.warn('[CHART] ⚠️ Removing duplicate timestamp:', point.time);
-              return false;
-            }
-            return true;
+            return point.time !== arr[index - 1].time;
           });
 
         if (chartData.length === 0) {
@@ -136,11 +125,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
           return;
         }
 
-        console.log(`[CHART] ✓ ${chartData.length} valid points after filtering`);
-        console.log(`[CHART] Price range: $${chartData[0].value} → $${chartData[chartData.length - 1].value}`);
-
         setHistoricalData(chartData);
-        console.log(`[CHART] ✓ Chart updated with fresh backend data for ${asset.id} (${timeframe})`);
       } catch (error) {
         console.error(`[CHART] ✗ Failed to fetch historical data:`, error);
         // Keep cached data if fetch fails, or show empty
@@ -224,19 +209,14 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
   // Update series data
   useEffect(() => {
     if (!seriesRef.current || !historicalData || historicalData.length === 0) {
-      console.log('[CHART] Skipping setData - no series or no data');
       return;
     }
-
-    console.log(`[CHART] Setting chart data: ${historicalData.length} points`);
-    console.log('[CHART] First point:', historicalData[0]);
-    console.log('[CHART] Last point:', historicalData[historicalData.length - 1]);
 
     try {
       // Validate, sort, and deduplicate all data points before setting
       const validData = historicalData
         .filter(point => {
-          const isValid = point &&
+          return point &&
                  typeof point.time === 'number' &&
                  typeof point.value === 'number' &&
                  !isNaN(point.value) &&
@@ -244,21 +224,12 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
                  point.value !== undefined &&
                  point.value > 0 &&
                  point.time > 0;
-
-          if (!isValid) {
-            console.warn('[CHART] ⚠️ Filtering out invalid point:', point);
-          }
-          return isValid;
         })
         .sort((a: { time: Time; value: number }, b: { time: Time; value: number }) => (a.time as number) - (b.time as number)) // Ensure ascending order
         .filter((point: { time: Time; value: number }, index: number, arr: { time: Time; value: number }[]) => {
           // Remove duplicates - lightweight-charts doesn't allow duplicate times
           if (index === 0) return true;
-          if (point.time === arr[index - 1].time) {
-            console.warn(`[CHART] ⚠️ Removing duplicate timestamp: ${point.time}`);
-            return false;
-          }
-          return true;
+          return point.time !== arr[index - 1].time;
         });
 
       if (validData.length === 0) {
@@ -266,15 +237,11 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         return;
       }
 
-      console.log(`[CHART] ✓ Setting ${validData.length} valid sorted points`);
-      console.log(`[CHART] ✓ Time range: ${validData[0].time} → ${validData[validData.length - 1].time}`);
-      console.log(`[CHART] ✓ Value range: $${validData[0].value} → $${validData[validData.length - 1].value}`);
-
       // Defensive: Clear series completely before setting new data
       try {
         seriesRef.current.setData([]);
       } catch (clearError) {
-        console.warn('[CHART] ⚠️ Error clearing data (continuing anyway):', clearError);
+        // Ignore clear errors
       }
 
       // Small delay to ensure clear completed
@@ -289,8 +256,6 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
           if (chartRef.current) {
             chartRef.current.timeScale().fitContent();
           }
-
-          console.log('[CHART] ✓ Chart data set successfully');
         } catch (setError) {
           console.error('[CHART] ✗ CRITICAL ERROR setting chart data:', setError);
           console.error('[CHART] ✗ Data that caused error:', validData.slice(0, 5), '...', validData.slice(-5));
@@ -309,7 +274,6 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
 
     // Validate current price before updating
     if (typeof currentPrice !== 'number' || isNaN(currentPrice) || currentPrice <= 0) {
-      console.warn('[CHART] Skipping live update - invalid price:', currentPrice);
       return;
     }
 

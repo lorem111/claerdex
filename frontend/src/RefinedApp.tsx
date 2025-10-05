@@ -728,8 +728,6 @@ export default function RefinedApp() {
       if (!skipCache) {
         const cached = getCachedPrices();
         if (cached && cached.data) {
-          console.log('[PRICES] ⚡ INSTANT load from cache:', cached.data);
-
           // Extract prices from cached data
           const cachedPrices: Record<string, number> = {};
           const cachedChanges: Record<string, number> = {};
@@ -746,12 +744,9 @@ export default function RefinedApp() {
       }
 
       // BACKGROUND REFRESH: Fetch fresh data (this happens in background)
-      console.log('[PRICES] 🔄 Fetching fresh prices from backend...');
       // Add cache-busting timestamp to force fresh data
       const response = await fetch(`${PRICE_API_URL}?t=${Date.now()}`);
       const responseData = await response.json();
-
-      console.log('[PRICES] Raw backend response:', responseData);
 
       // Cache the fresh data for next instant load
       cachePrices(responseData);
@@ -774,7 +769,6 @@ export default function RefinedApp() {
             // Add 0.00001% variation to show movement
             const variation = price * 0.0000001 * (Math.random() > 0.5 ? 1 : -1);
             price = price + variation;
-            console.log(`[PRICES] 💫 Adding micro-variation to ${assetId}: ${oldPrice} → ${price}`);
           }
 
           newPrices[assetId] = price;
@@ -797,7 +791,6 @@ export default function RefinedApp() {
         }
       });
 
-      console.log('[PRICES] ✓ Updated with fresh prices from backend:', newPrices);
       setCurrentPrices(newPrices);
       setPriceChanges(newChanges);
     } catch (error) {
@@ -826,11 +819,6 @@ export default function RefinedApp() {
 
   // Sync backend positions to local positions for display
   useEffect(() => {
-    console.log('[POSITION SYNC] Converting backend positions to frontend format...', {
-      backendPositionsCount: backendPositions.length,
-      backendPositions: backendPositions
-    });
-
     // Convert backend positions to frontend Position type
     // Handle both empty and non-empty arrays
     const convertedPositions: Position[] = backendPositions.map((bp, index) => {
@@ -857,7 +845,6 @@ export default function RefinedApp() {
       };
     });
 
-    console.log('[POSITION SYNC] ✓ Converted positions:', convertedPositions);
     setPositions(convertedPositions);
   }, [backendPositions, currentPrices]);
 
