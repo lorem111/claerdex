@@ -346,17 +346,17 @@ function TradePanel({
   onOpenPosition: (side: 'LONG' | 'SHORT', size: number, collateral: number, leverage: number) => void;
   currentPrice: number
 }) {
-  const { account, availableCollateral, refreshAccountState } = useWeb3();
+  const { account, availableCollateral, balance, refreshAccountState } = useWeb3();
   const toast = useToast();
   const [side, setSide] = useState<'LONG' | 'SHORT'>('LONG');
-  const [collateral, setCollateral] = useState('100'); // User inputs collateral in AE
+  const [amountUSD, setAmountUSD] = useState('100'); // User inputs amount in USD
   const [leverage, setLeverage] = useState(10);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Calculate position size: collateral (AE) * oracle price (USD/AE) * leverage
-  const collateralAE = parseFloat(collateral) || 0;
-  const positionSize = collateralAE * currentPrice * leverage;
-  const collateralUSD = collateralAE * currentPrice;
+  // Calculate collateral in AE from USD amount and position size
+  const amountUSDValue = parseFloat(amountUSD) || 0;
+  const collateralAE = amountUSDValue / currentPrice; // Convert USD to AE
+  const positionSize = amountUSDValue * leverage; // Position size in USD
 
   const handleOpenPosition = async () => {
     if (!account) {
@@ -364,18 +364,18 @@ function TradePanel({
       return;
     }
 
-    if (collateralAE > availableCollateral) {
+    if (collateralAE > balance) {
       toast({
-        title: "Insufficient Collateral",
-        description: `You need ${formatAE(collateralAE)} but only have ${formatAE(availableCollateral)} available`,
+        title: "Insufficient Balance",
+        description: `You need ${formatAE(collateralAE)} but only have ${formatAE(balance)} in wallet`,
         status: "error",
         duration: 3000
       });
       return;
     }
 
-    if (collateralAE === 0) {
-      toast({ title: "Invalid collateral", status: "warning", duration: 3000 });
+    if (amountUSDValue === 0) {
+      toast({ title: "Invalid amount", status: "warning", duration: 3000 });
       return;
     }
 
@@ -458,11 +458,11 @@ function TradePanel({
       </HStack>
 
       <Box>
-        <Text mb={1} fontSize="sm" color="gray.400">Collateral (AE)</Text>
+        <Text mb={1} fontSize="sm" color="gray.400">Amount (USD)</Text>
         <Input
           placeholder="e.g., 100"
-          value={collateral}
-          onChange={(e) => setCollateral(e.target.value)}
+          value={amountUSD}
+          onChange={(e) => setAmountUSD(e.target.value)}
           size="lg"
           textAlign="right"
           bg="gray.700"
@@ -494,17 +494,17 @@ function TradePanel({
           <Text fontWeight="bold">{formatUSD(positionSize)}</Text>
         </HStack>
         <HStack justify="space-between">
-          <Text>Collateral (USD):</Text>
-          <Text fontWeight="bold">{formatUSD(collateralUSD)}</Text>
+          <Text>Collateral (AE):</Text>
+          <Text fontWeight="bold">{formatAE(collateralAE)}</Text>
         </HStack>
         <HStack justify="space-between">
           <Text>Liquidation Price (Est.):</Text>
           <Text fontWeight="bold">{formatPrice(currentPrice * (1 - 1/leverage))}</Text>
         </HStack>
         <HStack justify="space-between">
-          <Text>Available Collateral:</Text>
+          <Text>Wallet Balance:</Text>
           <Text fontWeight="bold" color={account ? "white" : "gray.500"}>
-            {account ? formatAE(availableCollateral) : "0.00 AE"}
+            {account ? formatAE(balance) : "0.00 AE"}
           </Text>
         </HStack>
       </VStack>

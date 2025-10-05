@@ -140,6 +140,9 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
+    // Set precision based on asset price - AE needs more decimals due to low price
+    const precision = asset.id === 'AE' ? 4 : 2;
+
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { color: 'transparent' },
@@ -181,6 +184,11 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
       bottomColor: asset.change >= 0 ? 'rgba(16, 185, 129, 0.0)' : 'rgba(244, 63, 94, 0.0)',
       lineColor: asset.change >= 0 ? '#10b981' : '#f43f5e',
       lineWidth: 2,
+      priceFormat: {
+        type: 'price',
+        precision: precision,
+        minMove: asset.id === 'AE' ? 0.0001 : 0.01, // Smaller price movements for AE
+      },
     });
 
     chartRef.current = chart;
