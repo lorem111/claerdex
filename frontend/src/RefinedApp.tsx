@@ -14,20 +14,22 @@ import {
   SliderTrack,
   SliderFilledTrack,
   SliderThumb,
-  Tag,
   HStack,
   Divider,
   useToast,
+  Spinner,
+  Badge,
 } from '@chakra-ui/react';
 import { BiTrendingUp, BiTrendingDown } from 'react-icons/bi';
 
 // shadcn/ui Components
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
-import { useToast as useShadcnToast } from "@/components/ui/use-toast";
 import { Toaster } from "@/components/ui/toaster";
+
+// Utilities
+import { formatUSD, formatPrice, formatPnL, formatPercentage, formatAE } from '@/utils/formatters';
 
 // TYPES
 type Asset = {
@@ -65,13 +67,14 @@ const ASSETS: Asset[] = [
   { id: 'SOL', name: 'Solana', icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png', price: 165.21, change: 3.89 },
 ];
 
-const generateChartData = () => {
+const generateChartData = (basePrice: number) => {
   let data = [];
-  let value = 1000;
+  let value = basePrice;
   for (let i = 0; i < 30; i++) {
     const date = new Date();
     date.setDate(date.getDate() - (30 - i));
-    value += (Math.random() - 0.5) * 50;
+    const volatility = basePrice * 0.02; // 2% volatility
+    value += (Math.random() - 0.5) * volatility;
     data.push({
       name: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       value: value
@@ -119,7 +122,7 @@ const useWeb3 = () => useContext(Web3Context);
 
 // HEADER COMPONENT
 function Header() {
-  const { account, isConnecting, connectWallet, disconnectWallet } = useWeb3();
+  const { account, balance, isConnecting, connectWallet, disconnectWallet } = useWeb3();
 
   return (
     <header className="border-b border-slate-800 bg-slate-950/95 backdrop-blur supports-[backdrop-filter]:bg-slate-950/60">
@@ -135,14 +138,28 @@ function Header() {
             </div>
           </div>
 
-          <Button
-            onClick={account ? disconnectWallet : connectWallet}
-            disabled={isConnecting}
-            className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700"
-          >
-            <Wallet className="w-4 h-4 mr-2" />
-            {isConnecting ? "Connecting..." : account ? `${account.slice(0, 6)}...${account.slice(-4)}` : "Connect Wallet"}
-          </Button>
+          <div className="flex items-center gap-4">
+            {account && (
+              <div className="flex items-center gap-3 px-4 py-2 bg-slate-900/50 rounded-lg border border-slate-800">
+                <div className="text-right">
+                  <p className="text-xs text-slate-400">Balance</p>
+                  <p className="text-sm font-semibold text-white">{formatAE(balance)}</p>
+                </div>
+                <div className="h-8 w-px bg-slate-700" />
+                <Badge colorScheme="green" className="px-3 py-1">
+                  {account.slice(0, 6)}...{account.slice(-4)}
+                </Badge>
+              </div>
+            )}
+            <Button
+              onClick={account ? disconnectWallet : connectWallet}
+              disabled={isConnecting}
+              className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700"
+            >
+              <Wallet className="w-4 h-4 mr-2" />
+              {isConnecting ? "Connecting..." : account ? "Disconnect" : "Connect Wallet"}
+            </Button>
+          </div>
         </div>
       </div>
     </header>
@@ -151,13 +168,24 @@ function Header() {
 
 // CHART & STATS COMPONENT
 function ChartPanel({ asset, currentPrice }: { asset: Asset; currentPrice: number }) {
-  const [chartData, setChartData] = useState(generateChartData());
+  const [chartData, setChartData] = useState(generateChartData(asset.price));
 
   useEffect(() => {
-    const newData = generateChartData();
-    newData[newData.length - 1].value = currentPrice * 28000; // Scale for visualization
+    // Generate new chart data when asset changes
+    const newData = generateChartData(asset.price);
     setChartData(newData);
-  }, [asset, currentPrice]);
+  }, [asset]);
+
+  useEffect(() => {
+    // Update last data point with live price
+    setChartData(prev => {
+      const newData = [...prev];
+      if (newData.length > 0) {
+        newData[newData.length - 1].value = currentPrice;
+      }
+      return newData;
+    });
+  }, [currentPrice]);
 
   return (
     <Card className="bg-slate-900/50 border-slate-800 shadow-xl">
@@ -171,10 +199,10 @@ function ChartPanel({ asset, currentPrice }: { asset: Asset; currentPrice: numbe
             </div>
           </div>
           <div className="text-right">
-            <div className="text-3xl font-bold text-white">${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div className="text-3xl font-bold text-white">{formatPrice(currentPrice)}</div>
             <div className={`text-sm font-semibold flex items-center justify-end gap-1 ${asset.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               {asset.change >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-              {asset.change >= 0 ? '+' : ''}{asset.change.toFixed(2)}% (24h)
+              {formatPercentage(asset.change)} (24h)
             </div>
           </div>
         </div>
@@ -195,7 +223,7 @@ function ChartPanel({ asset, currentPrice }: { asset: Asset; currentPrice: numbe
               </defs>
               <YAxis
                 stroke="#64748b"
-                tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                tickFormatter={(value) => formatPrice(value)}
                 style={{ fontSize: '12px' }}
               />
               <XAxis
@@ -228,16 +256,29 @@ function ChartPanel({ asset, currentPrice }: { asset: Asset; currentPrice: numbe
   );
 }
 
-// CHAKRA TRADE PANEL (from original)
-function TradePanel({ asset, onOpenPosition, currentPrice }: { asset: Asset; onOpenPosition: (side: 'LONG' | 'SHORT', size: number, leverage: number) => void; currentPrice: number }) {
+// CHAKRA TRADE PANEL (Refactored with collateral input)
+function TradePanel({
+  asset,
+  onAssetChange,
+  onOpenPosition,
+  currentPrice
+}: {
+  asset: Asset;
+  onAssetChange: (assetId: string) => void;
+  onOpenPosition: (side: 'LONG' | 'SHORT', size: number, collateral: number, leverage: number) => void;
+  currentPrice: number
+}) {
   const { account, balance } = useWeb3();
   const toast = useToast();
   const [side, setSide] = useState<'LONG' | 'SHORT'>('LONG');
-  const [size, setSize] = useState('1000');
+  const [collateral, setCollateral] = useState('100'); // User inputs collateral in AE
   const [leverage, setLeverage] = useState(10);
   const [isLoading, setIsLoading] = useState(false);
 
-  const collateralNeeded = (parseFloat(size) || 0) / leverage;
+  // Calculate position size: collateral (AE) * oracle price (USD/AE) * leverage
+  const collateralAE = parseFloat(collateral) || 0;
+  const positionSize = collateralAE * currentPrice * leverage;
+  const collateralUSD = collateralAE * currentPrice;
 
   const handleOpenPosition = () => {
     if (!account) {
@@ -245,15 +286,32 @@ function TradePanel({ asset, onOpenPosition, currentPrice }: { asset: Asset; onO
       return;
     }
 
+    if (collateralAE > balance) {
+      toast({
+        title: "Insufficient Balance",
+        description: `You need ${formatAE(collateralAE)} but only have ${formatAE(balance)}`,
+        status: "error",
+        duration: 3000
+      });
+      return;
+    }
+
+    if (collateralAE === 0) {
+      toast({ title: "Invalid collateral", status: "warning", duration: 3000 });
+      return;
+    }
+
     setIsLoading(true);
+    // Simulate blockchain transaction
     setTimeout(() => {
-      onOpenPosition(side, parseFloat(size), leverage);
+      onOpenPosition(side, positionSize, collateralAE, leverage);
       setIsLoading(false);
       toast({
-        title: 'Position Opened!',
-        description: `${side} ${asset.id} position of $${size} opened at $${currentPrice.toLocaleString()}`,
+        title: 'Position Opened Successfully!',
+        description: `${side} ${asset.id} position of ${formatUSD(positionSize)} opened at ${formatPrice(currentPrice)}`,
         status: 'success',
         duration: 5000,
+        isClosable: true,
       });
     }, 1500);
   };
@@ -264,6 +322,7 @@ function TradePanel({ asset, onOpenPosition, currentPrice }: { asset: Asset; onO
 
       <Select
         value={asset.id}
+        onChange={(e) => onAssetChange(e.target.value)}
         size="lg"
         bg="gray.700"
       >
@@ -292,21 +351,22 @@ function TradePanel({ asset, onOpenPosition, currentPrice }: { asset: Asset; onO
       </HStack>
 
       <Box>
-        <Text mb={1} fontSize="sm" color="gray.400">Position Size (USD)</Text>
+        <Text mb={1} fontSize="sm" color="gray.400">Collateral (AE)</Text>
         <Input
-          placeholder="e.g., 1000"
-          value={size}
-          onChange={(e) => setSize(e.target.value)}
+          placeholder="e.g., 100"
+          value={collateral}
+          onChange={(e) => setCollateral(e.target.value)}
           size="lg"
           textAlign="right"
           bg="gray.700"
+          type="number"
         />
       </Box>
 
       <Box>
         <Text mb={1} fontSize="sm" color="gray.400">Leverage: {leverage}x</Text>
         <Slider
-          defaultValue={10}
+          value={leverage}
           min={1}
           max={50}
           step={1}
@@ -323,16 +383,22 @@ function TradePanel({ asset, onOpenPosition, currentPrice }: { asset: Asset; onO
 
       <VStack spacing={1} align="stretch" fontSize="sm" color="gray.300">
         <HStack justify="space-between">
-          <Text>Collateral Needed:</Text>
-          <Text fontWeight="bold">{collateralNeeded.toFixed(2)} USD</Text>
+          <Text>Position Size:</Text>
+          <Text fontWeight="bold">{formatUSD(positionSize)}</Text>
+        </HStack>
+        <HStack justify="space-between">
+          <Text>Collateral (USD):</Text>
+          <Text fontWeight="bold">{formatUSD(collateralUSD)}</Text>
         </HStack>
         <HStack justify="space-between">
           <Text>Liquidation Price (Est.):</Text>
-          <Text fontWeight="bold">${(currentPrice * (1 - 1/leverage)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</Text>
+          <Text fontWeight="bold">{formatPrice(currentPrice * (1 - 1/leverage))}</Text>
         </HStack>
         <HStack justify="space-between">
           <Text>Available Balance:</Text>
-          <Text fontWeight="bold">{balance.toFixed(2)} AE</Text>
+          <Text fontWeight="bold" color={account ? "white" : "gray.500"}>
+            {account ? formatAE(balance) : "0.00 AE"}
+          </Text>
         </HStack>
       </VStack>
 
@@ -341,10 +407,10 @@ function TradePanel({ asset, onOpenPosition, currentPrice }: { asset: Asset; onO
         size="lg"
         w="100%"
         isDisabled={!account || isLoading}
-        isLoading={isLoading}
         onClick={handleOpenPosition}
+        leftIcon={isLoading ? <Spinner size="sm" /> : undefined}
       >
-        {account ? `Open ${side} Position` : 'Connect Wallet to Trade'}
+        {!account ? 'Connect Wallet to Trade' : `Open ${side} Position`}
       </ChakraButton>
     </VStack>
   );
@@ -417,11 +483,11 @@ function PositionsPanel({ positions, currentPrices }: { positions: Position[]; c
                       {p.side}
                     </span>
                   </TableCell>
-                  <TableCell className="text-white">${p.size.toLocaleString()}</TableCell>
-                  <TableCell className="text-white">${p.entryPrice.toLocaleString()}</TableCell>
-                  <TableCell className="text-white">${p.liqPrice.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                  <TableCell className="text-white">{formatUSD(p.size)}</TableCell>
+                  <TableCell className="text-white">{formatPrice(p.entryPrice)}</TableCell>
+                  <TableCell className="text-white">{formatPrice(p.liqPrice)}</TableCell>
                   <TableCell className={`text-right font-mono font-semibold ${p.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(2)}
+                    {formatPnL(p.pnl)}
                   </TableCell>
                 </TableRow>
               ))
@@ -441,30 +507,42 @@ export default function RefinedApp() {
     ASSETS.reduce((acc, asset) => ({ ...acc, [asset.id]: asset.price }), {})
   );
 
+  // Live price feed simulation
   useEffect(() => {
     const priceInterval = setInterval(() => {
       setCurrentPrices(prev => {
         const newPrices = { ...prev };
         for (const asset of ASSETS) {
-          const volatility = 0.0001;
+          const volatility = 0.0005; // 0.05% volatility per tick
           newPrices[asset.id] *= 1 + (Math.random() - 0.5) * volatility;
         }
         return newPrices;
       });
-    }, 1000);
+    }, 2000); // Update every 2 seconds
     return () => clearInterval(priceInterval);
   }, []);
 
-  const handleOpenPosition = (side: 'LONG' | 'SHORT', size: number, leverage: number) => {
+  const handleAssetChange = (assetId: string) => {
+    const asset = ASSETS.find(a => a.id === assetId);
+    if (asset) {
+      setSelectedAsset(asset);
+    }
+  };
+
+  const handleOpenPosition = (side: 'LONG' | 'SHORT', size: number, collateral: number, leverage: number) => {
     const currentPrice = currentPrices[selectedAsset.id];
+    const liqPrice = side === 'LONG'
+      ? currentPrice * (1 - (1 / leverage) * 0.9) // 90% of margin
+      : currentPrice * (1 + (1 / leverage) * 0.9);
+
     const newPosition: Position = {
       id: Date.now(),
       asset: selectedAsset,
       side,
       size,
-      collateral: size / leverage,
+      collateral,
       entryPrice: currentPrice,
-      liqPrice: currentPrice * (1 - 1/leverage),
+      liqPrice,
       pnl: 0,
     };
     setPositions(prev => [...prev, newPosition]);
@@ -484,6 +562,7 @@ export default function RefinedApp() {
             <div className="lg:col-span-1">
               <TradePanel
                 asset={selectedAsset}
+                onAssetChange={handleAssetChange}
                 onOpenPosition={handleOpenPosition}
                 currentPrice={currentPrices[selectedAsset.id]}
               />
