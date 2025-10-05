@@ -126,16 +126,17 @@ def get_price_history(asset: str = "AE", interval: str = "1m", limit: int = 60):
     # Limit the number of data points
     limit = min(limit, 1000)
 
-    # Debug: check what price we're using
-    current_price_check = ae.get_oracle_price(asset)
+    # Get current price from oracle
+    current_price = ae.get_oracle_price(asset)
 
-    history = ae.get_price_history(asset, interval, limit)
+    # Pass current price explicitly to history function
+    history = ae.get_price_history(asset, interval, limit, current_price=current_price)
 
     return {
         "asset": asset,
         "interval": interval,
         "data": history,
-        "debug_current_price": current_price_check,
+        "debug_current_price": current_price,
     }
 
 @app.get("/account/{user_address}", response_model=Account)

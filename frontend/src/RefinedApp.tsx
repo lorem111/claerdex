@@ -94,8 +94,29 @@ const Web3Context = createContext<Web3ContextType>({
 const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [account, setAccount] = useState<string | null>(null);
   const [balance, setBalance] = useState(0);
+  const [availableCollateral, setAvailableCollateral] = useState(0);
+  const [backendPositions, setBackendPositions] = useState<BackendPosition[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const toast = useToast();
+
+  // Fetch account state from backend
+  const refreshAccountState = async () => {
+    if (!account) return;
+
+    try {
+      console.log('Fetching account state from backend...');
+      const accountState = await fetchAccountState(account);
+
+      setBalance(accountState.on_chain_balance_ae);
+      setAvailableCollateral(accountState.available_collateral_ae);
+      setBackendPositions(accountState.positions);
+
+      console.log('Account state loaded:', accountState);
+    } catch (error) {
+      console.error('Failed to fetch account state:', error);
+      // Don't show error toast on periodic refresh failures
+    }
+  };
 
   const connectWallet = async () => {
     setIsConnecting(true);
@@ -112,6 +133,25 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         status: 'success',
         duration: 3000,
       });
+
+      // Fetch account state from backend after connecting
+      setIsConnecting(false);
+
+      // Small delay to let the state update
+      setTimeout(async () => {
+        try {
+          const accountState = await fetchAccountState(walletInfo.address);
+          setBalance(accountState.on_chain_balance_ae);
+          setAvailableCollateral(accountState.available_collateral_ae);
+          setBackendPositions(accountState.positions);
+          console.log('Backend account state loaded:', accountState);
+        } catch (error) {
+          console.error('Failed to load account from backend:', error);
+          // Set fallback values
+          setAvailableCollateral(walletInfo.balance);
+        }
+      }, 100);
+
     } catch (error) {
       console.error('Wallet connection error:', error);
 
@@ -128,14 +168,17 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       const mockAddress = "ak_demo" + Math.random().toString(36).substring(2, 10);
       setAccount(mockAddress);
       setBalance(1500.75);
-    }
+      setAvailableCollateral(1500.75);
 
-    setIsConnecting(false);
+      setIsConnecting(false);
+    }
   };
 
   const disconnectWallet = () => {
     setAccount(null);
     setBalance(0);
+    setAvailableCollateral(0);
+    setBackendPositions([]);
 
     toast({
       title: 'Wallet Disconnected',
@@ -145,7 +188,16 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   };
 
   return (
-    <Web3Context.Provider value={{ account, balance, isConnecting, connectWallet, disconnectWallet }}>
+    <Web3Context.Provider value={{
+      account,
+      balance,
+      availableCollateral,
+      backendPositions,
+      isConnecting,
+      connectWallet,
+      disconnectWallet,
+      refreshAccountState
+    }}>
       {children}
     </Web3Context.Provider>
   );
@@ -247,7 +299,7 @@ function TradePanel({
   onOpenPosition: (side: 'LONG' | 'SHORT', size: number, collateral: number, leverage: number) => void;
   currentPrice: number
 }) {
-  const { account, balance } = useWeb3();
+  const { account, availableCollateral, refreshAccountState } = useWeb3();
   const toast = useToast();
   const [side, setSide] = useState<'LONG' | 'SHORT'>('LONG');
   const [collateral, setCollateral] = useState('100'); // User inputs collateral in AE
@@ -259,16 +311,16 @@ function TradePanel({
   const positionSize = collateralAE * currentPrice * leverage;
   const collateralUSD = collateralAE * currentPrice;
 
-  const handleOpenPosition = () => {
+  const handleOpenPosition = async () => {
     if (!account) {
       toast({ title: "Connect wallet first", status: "warning", duration: 3000 });
       return;
     }
 
-    if (collateralAE > balance) {
+    if (collateralAE > availableCollateral) {
       toast({
-        title: "Insufficient Balance",
-        description: `You need ${formatAE(collateralAE)} but only have ${formatAE(balance)}`,
+        title: "Insufficient Collateral",
+        description: `You need ${formatAE(collateralAE)} but only have ${formatAE(availableCollateral)} available`,
         status: "error",
         duration: 3000
       });
@@ -281,18 +333,43 @@ function TradePanel({
     }
 
     setIsLoading(true);
-    // Simulate blockchain transaction
-    setTimeout(() => {
+
+    try {
+      // Call backend API to open position
+      const response = await openPositionAPI({
+        user_address: account,
+        asset: asset.id,
+        side: side.toLowerCase() as 'long' | 'short',
+        collateral_to_use_ae: collateralAE,
+        leverage: leverage,
+      });
+
+      // Refresh account state to get updated positions and balance
+      await refreshAccountState();
+
+      // Call the parent handler for UI updates
       onOpenPosition(side, positionSize, collateralAE, leverage);
-      setIsLoading(false);
+
       toast({
-        title: 'Position Opened Successfully!',
+        title: 'Position Opened!',
         description: `${side} ${asset.id} position of ${formatUSD(positionSize)} opened at ${formatPrice(currentPrice)}`,
         status: 'success',
         duration: 5000,
         isClosable: true,
       });
-    }, 1500);
+
+      console.log('Position opened on-chain:', response.on_chain_tx);
+    } catch (error) {
+      console.error('Failed to open position:', error);
+      toast({
+        title: 'Failed to Open Position',
+        description: error instanceof Error ? error.message : 'An error occurred',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -374,9 +451,9 @@ function TradePanel({
           <Text fontWeight="bold">{formatPrice(currentPrice * (1 - 1/leverage))}</Text>
         </HStack>
         <HStack justify="space-between">
-          <Text>Available Balance:</Text>
+          <Text>Available Collateral:</Text>
           <Text fontWeight="bold" color={account ? "white" : "gray.500"}>
-            {account ? formatAE(balance) : "0.00 AE"}
+            {account ? formatAE(availableCollateral) : "0.00 AE"}
           </Text>
         </HStack>
       </VStack>
@@ -608,7 +685,7 @@ function PositionsPanel({
 // MAIN APP
 export default function RefinedApp() {
   const toast = useToast();
-  const { balance } = useWeb3();
+  const { balance, backendPositions, account, refreshAccountState } = useWeb3();
   const [selectedAsset, setSelectedAsset] = useState(ASSETS[0]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>(
@@ -659,6 +736,18 @@ export default function RefinedApp() {
     return () => clearInterval(priceInterval);
   }, []);
 
+  // Refresh account state periodically for real-time PnL updates
+  useEffect(() => {
+    if (!account) return;
+
+    // Refresh every 10 seconds when connected
+    const accountInterval = setInterval(() => {
+      refreshAccountState();
+    }, 10000);
+
+    return () => clearInterval(accountInterval);
+  }, [account, refreshAccountState]);
+
   const handleAssetChange = (assetId: string) => {
     const asset = ASSETS.find(a => a.id === assetId);
     if (asset) {
@@ -690,19 +779,41 @@ export default function RefinedApp() {
     setPositions(prev => [...prev, newPosition]);
   };
 
-  const handleClosePosition = (id: number) => {
+  const handleClosePosition = async (id: number) => {
+    if (!account) {
+      toast({ title: "Please connect wallet", status: "warning", duration: 3000 });
+      return;
+    }
+
     const position = positions.find(p => p.id === id);
     if (!position) return;
 
-    setPositions(prev => prev.filter(p => p.id !== id));
+    try {
+      // Call backend API to close position
+      const response = await closePositionAPI(account, id.toString());
 
-    toast({
-      title: 'Position Closed',
-      description: `${position.side} ${position.asset.id} position closed. PnL: ${formatPnL(position.pnl)}`,
-      status: position.pnl >= 0 ? 'success' : 'warning',
-      duration: 4000,
-      isClosable: true,
-    });
+      // Refresh account state to get updated positions and balance
+      await refreshAccountState();
+
+      // Remove from local state
+      setPositions(prev => prev.filter(p => p.id !== id));
+
+      toast({
+        title: 'Position Closed',
+        description: `${position.side} ${position.asset.id} position closed. PnL: ${formatPnL(response.realized_pnl_ae)} AE`,
+        status: response.realized_pnl_ae >= 0 ? 'success' : 'warning',
+        duration: 4000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error('Failed to close position:', error);
+      toast({
+        title: 'Failed to Close Position',
+        description: error instanceof Error ? error.message : 'An error occurred',
+        status: 'error',
+        duration: 5000,
+      });
+    }
   };
 
   return (

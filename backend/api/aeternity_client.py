@@ -159,7 +159,7 @@ def get_latest_block() -> dict:
             "error": str(e)
         }
 
-def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list:
+def get_price_history(asset: str, interval: str = "1m", limit: int = 60, current_price: float = None) -> list:
     """
     Generate historical price data for charting.
     Works backwards from current real price to generate plausible historical data.
@@ -168,6 +168,7 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
         asset: Asset symbol (e.g., "AE", "BTC")
         interval: Time interval ("1m", "5m", "15m", "1h", "4h", "1d")
         limit: Number of data points to return
+        current_price: Current price to work backwards from (if None, will fetch from oracle)
 
     Returns:
         List of price data points with timestamp and OHLC data
@@ -188,9 +189,11 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
     seconds = interval_seconds.get(interval, 60)
     current_time = int(time.time())
 
-    # Get current REAL price from oracle
-    current_price = get_oracle_price(asset)
-    print(f"[Historical Data] Oracle price for {asset}: ${current_price}")
+    # Use provided price or get from oracle
+    if current_price is None:
+        current_price = get_oracle_price(asset)
+
+    print(f"[Historical Data] Using price for {asset}: ${current_price}")
 
     # Set volatility based on asset
     volatility = VOLATILITY.get(asset, 0.002)
