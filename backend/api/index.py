@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
+import time
 
 # Import from same directory (api/) using relative imports
 from . import aeternity_client as ae
@@ -8,6 +9,37 @@ from . import state as db
 from .models import Account, Position, OpenPositionRequest
 
 app = FastAPI()
+
+# Server-side cache for price history to avoid CoinGecko rate limits
+# Format: {(asset, interval, limit): (data, timestamp)}
+PRICE_HISTORY_CACHE = {}
+CACHE_TTL_SECONDS = 300  # 5 minutes - CoinGecko data doesn't change that fast
+
+def initialize_price_cache():
+    """Pre-populate cache with all assets on startup to avoid rate limits"""
+    assets = ["AE", "BTC", "ETH", "SOL"]
+    interval = "1m"
+    limit = 180
+
+    print("[CACHE INIT] Pre-populating price history cache...")
+    for asset in assets:
+        try:
+            history = ae.get_price_history(asset, interval, limit)
+            if history:
+                cache_key = (asset, interval, limit)
+                PRICE_HISTORY_CACHE[cache_key] = (history, time.time())
+                print(f"[CACHE INIT] ✓ Cached {len(history)} points for {asset}")
+            else:
+                print(f"[CACHE INIT] ✗ No data for {asset}")
+            # Small delay to avoid rate limiting during init
+            time.sleep(0.5)
+        except Exception as e:
+            print(f"[CACHE INIT] ✗ Failed to cache {asset}: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    """Run initialization tasks on server startup"""
+    initialize_price_cache()
 
 # Add CORS middleware to allow frontend connections
 app.add_middleware(
@@ -244,10 +276,30 @@ def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: i
     # Limit the number of data points
     limit = min(limit, 1000)
 
-    # ALWAYS use aeternity_client for now (skip price_history module due to KV issues)
-    print(f"[HISTORY ENDPOINT] Fetching {asset} history using aeternity_client")
+    # Check cache first to avoid CoinGecko rate limits
+    cache_key = (asset, interval, limit)
+    current_time = time.time()
+
+    if cache_key in PRICE_HISTORY_CACHE:
+        cached_data, cached_time = PRICE_HISTORY_CACHE[cache_key]
+        if current_time - cached_time < CACHE_TTL_SECONDS:
+            print(f"[HISTORY CACHE] ⚡ Returning cached data for {asset} ({int(current_time - cached_time)}s old)")
+            return {
+                "asset": asset,
+                "interval": interval,
+                "data": cached_data,
+                "cached": True
+            }
+
+    # Cache miss or expired - fetch from CoinGecko
+    print(f"[HISTORY ENDPOINT] Fetching {asset} history from CoinGecko")
     history = ae.get_price_history(asset, interval, limit)
     print(f"[HISTORY ENDPOINT] Got {len(history)} points for {asset}")
+
+    # Store in cache if we got data
+    if history:
+        PRICE_HISTORY_CACHE[cache_key] = (history, current_time)
+        print(f"[HISTORY CACHE] ✓ Cached {len(history)} points for {asset}")
 
     return {
         "asset": asset,
