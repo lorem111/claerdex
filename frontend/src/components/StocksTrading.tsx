@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertCircle, BarChart3 } from 'lucide-react';
 import { formatPrice } from '@/utils/formatters';
 
 interface Stock {
