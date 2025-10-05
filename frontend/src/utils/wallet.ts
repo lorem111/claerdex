@@ -79,14 +79,14 @@ export const connectSuperheroWallet = async (): Promise<WalletInfo> => {
 
     console.log('Connecting to Superhero Wallet...');
 
-    // Create AeSdk instance with node
+    // Get wallet connection
+    const walletConnection = await superhero.getConnection();
+
+    // Create AeSdk instance with wallet connection
     const aeSdk = new AeSdk({
       nodes: [{ name: 'mainnet', instance: new Node(MAINNET_NODE_URL) }],
+      onAccount: walletConnection,
     });
-
-    // Get wallet connection and connect to SDK
-    const walletConnection = await superhero.getConnection();
-    await aeSdk.connectToWallet(walletConnection);
 
     console.log('Connected to wallet SDK');
 

@@ -32,6 +32,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 // Utilities
 import { formatUSD, formatPrice, formatPnL, formatPercentage, formatAE } from '@/utils/formatters';
 import { connectSuperheroWallet } from '@/utils/wallet';
+import { fetchAccountState, openPosition as openPositionAPI, closePosition as closePositionAPI, BackendAccount, BackendPosition } from '@/utils/api';
 
 // TYPES
 type Asset = {
@@ -56,9 +57,12 @@ type Position = {
 type Web3ContextType = {
   account: string | null;
   balance: number;
+  availableCollateral: number;
+  backendPositions: BackendPosition[];
   isConnecting: boolean;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
+  refreshAccountState: () => Promise<void>;
 };
 
 // API Configuration
@@ -79,9 +83,12 @@ const ASSETS: Asset[] = [
 const Web3Context = createContext<Web3ContextType>({
   account: null,
   balance: 0,
+  availableCollateral: 0,
+  backendPositions: [],
   isConnecting: false,
   connectWallet: async () => {},
   disconnectWallet: () => {},
+  refreshAccountState: async () => {},
 });
 
 const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => {

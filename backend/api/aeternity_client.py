@@ -190,7 +190,7 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
 
     # Get current REAL price from oracle
     current_price = get_oracle_price(asset)
-    print(f"[Historical Data] Using current oracle price for {asset}: ${current_price}")
+    print(f"[Historical Data] Oracle price for {asset}: ${current_price}")
 
     # Set volatility based on asset
     volatility = VOLATILITY.get(asset, 0.002)
@@ -209,7 +209,11 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
 
         # Generate realistic price movement (slightly random walk backwards)
         price_change = random.uniform(-volatility, volatility)
-        price = price * (1 - price_change)  # Walk backwards
+
+        # For the first iteration (most recent), use current price as-is
+        # For older points, walk the price backwards
+        if i > 0:
+            price = price * (1 - price_change)  # Walk backwards
 
         # Add to history (we'll reverse it later)
         # Round appropriately
