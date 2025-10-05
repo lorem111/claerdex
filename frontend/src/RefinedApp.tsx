@@ -107,16 +107,21 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     if (!account) return;
 
     try {
-      console.log('Fetching account state from backend...');
+      console.log('[ACCOUNT REFRESH] Fetching account state from backend for:', account);
       const accountState = await fetchAccountState(account);
 
       setBalance(accountState.on_chain_balance_ae);
       setAvailableCollateral(accountState.available_collateral_ae);
       setBackendPositions(accountState.positions);
 
-      console.log('Account state loaded:', accountState);
+      console.log('[ACCOUNT REFRESH] ✓ Account state loaded:', {
+        balance: accountState.on_chain_balance_ae,
+        availableCollateral: accountState.available_collateral_ae,
+        positionsCount: accountState.positions.length,
+        positions: accountState.positions
+      });
     } catch (error) {
-      console.error('Failed to fetch account state:', error);
+      console.error('[ACCOUNT REFRESH] ✗ Failed to fetch account state:', error);
       // Don't show error toast on periodic refresh failures
     }
   }, [account]);
@@ -354,6 +359,7 @@ function TradePanel({
 
     try {
       // Call backend API to open position
+      console.log('[TRADE] Opening position:', { asset: asset.id, side, collateral: collateralAE, leverage });
       const response = await openPositionAPI({
         user_address: account,
         asset: asset.id,
@@ -361,9 +367,12 @@ function TradePanel({
         collateral_to_use_ae: collateralAE,
         leverage: leverage,
       });
+      console.log('[TRADE] ✓ Position opened on backend:', response);
 
       // Refresh account state to get updated positions and balance
+      console.log('[TRADE] Refreshing account state to get new position...');
       await refreshAccountState();
+      console.log('[TRADE] ✓ Account state refreshed');
 
       // Call the parent handler for UI updates
       onOpenPosition(side, positionSize, collateralAE, leverage);
@@ -376,7 +385,7 @@ function TradePanel({
         isClosable: true,
       });
 
-      console.log('Position opened on-chain:', response.on_chain_tx);
+      console.log('[TRADE] Position opened on-chain:', response.on_chain_tx);
     } catch (error) {
       console.error('Failed to open position:', error);
       toast({
@@ -795,6 +804,11 @@ export default function RefinedApp() {
 
   // Sync backend positions to local positions for display
   useEffect(() => {
+    console.log('[POSITION SYNC] Converting backend positions to frontend format...', {
+      backendPositionsCount: backendPositions.length,
+      backendPositions: backendPositions
+    });
+
     // Convert backend positions to frontend Position type
     // Handle both empty and non-empty arrays
     const convertedPositions: Position[] = backendPositions.map((bp, index) => {
@@ -821,6 +835,7 @@ export default function RefinedApp() {
       };
     });
 
+    console.log('[POSITION SYNC] ✓ Converted positions:', convertedPositions);
     setPositions(convertedPositions);
   }, [backendPositions, currentPrices]);
 
@@ -852,6 +867,8 @@ export default function RefinedApp() {
     if (!position) return;
 
     try {
+      console.log('[CLOSE] Closing position:', { id, position });
+
       // Find the backend position by matching the hashed numeric ID
       const backendPosition = backendPositions.find(bp => {
         const numericId = bp.id.split('').reduce((acc, char) => {
@@ -865,10 +882,14 @@ export default function RefinedApp() {
       }
 
       // Call backend API to close position
+      console.log('[CLOSE] Closing position on backend:', backendPosition.id);
       const response = await closePositionAPI(account, backendPosition.id);
+      console.log('[CLOSE] ✓ Position closed on backend:', response);
 
       // Refresh account state to get updated positions and balance
+      console.log('[CLOSE] Refreshing account state...');
       await refreshAccountState();
+      console.log('[CLOSE] ✓ Account state refreshed');
 
       toast({
         title: 'Position Closed',
