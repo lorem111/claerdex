@@ -30,6 +30,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
+  const priceLineRefsRef = useRef<any[]>([]);
   const [historicalData, setHistoricalData] = useState<Array<{ time: Time; value: number }>>([]);
   const [timeframe, setTimeframe] = useState<'1m' | '15m' | '30m'>('1m');
 
@@ -300,11 +301,20 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
   useEffect(() => {
     if (!chartRef.current || !seriesRef.current) return;
 
-    // Remove existing price lines (we'll redraw them)
-    // Note: lightweight-charts doesn't have a direct way to remove all lines,
-    // so we store refs to them if needed. For simplicity, we recreate on position change.
+    // Remove all existing price lines
+    priceLineRefsRef.current.forEach(line => {
+      try {
+        seriesRef.current?.removePriceLine(line);
+      } catch (e) {
+        // Line might already be removed
+      }
+    });
+    priceLineRefsRef.current = [];
 
-    positions.forEach((position) => {
+    // Filter positions for the current asset only
+    const assetPositions = positions.filter(p => p.asset.id === asset.id);
+
+    assetPositions.forEach((position) => {
       // Entry price line
       const entryLine = seriesRef.current!.createPriceLine({
         price: position.entryPrice,
@@ -312,7 +322,7 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         lineWidth: 2,
         lineStyle: LineStyle.Solid,
         axisLabelVisible: true,
-        title: `${position.side} ${position.asset.id}`,
+        title: `${position.side} Entry`,
       });
 
       // Liquidation price line
@@ -324,8 +334,11 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         axisLabelVisible: true,
         title: 'Liq',
       });
+
+      // Store refs for cleanup
+      priceLineRefsRef.current.push(entryLine, liqLine);
     });
-  }, [positions]);
+  }, [positions, asset.id]);
 
   return (
     <div className="relative">
@@ -346,11 +359,11 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         ))}
       </div>
 
-      {/* Position Legend */}
-      {positions.length > 0 && (
+      {/* Position Legend - Only show positions for current asset */}
+      {positions.filter(p => p.asset.id === asset.id).length > 0 && (
         <div className="absolute top-4 right-4 z-10 bg-slate-900/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-700 max-w-xs">
           <p className="text-xs text-slate-400 mb-1">Active Positions</p>
-          {positions.map((pos) => (
+          {positions.filter(p => p.asset.id === asset.id).map((pos) => (
             <div key={pos.id} className="flex items-center gap-2 text-xs mb-1">
               <div className={`w-2 h-2 rounded-full ${pos.side === 'LONG' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
               <span className="text-slate-300">

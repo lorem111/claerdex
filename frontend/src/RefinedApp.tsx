@@ -105,9 +105,9 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [isConnecting, setIsConnecting] = useState(false);
   const toast = useToast();
 
-  // Debug: Log whenever backendPositions changes
+  // Debug: Log when backendPositions state changes in provider
   useEffect(() => {
-    console.log('[STATE] backendPositions changed:', backendPositions);
+    console.log('[WEB3 PROVIDER] backendPositions state changed to:', backendPositions.length, backendPositions);
   }, [backendPositions]);
 
   // Fetch account state from backend - memoized to prevent infinite re-renders
@@ -115,21 +115,21 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     if (!account) return;
 
     try {
-      console.log('[ACCOUNT REFRESH] Fetching account state from backend for:', account);
+      console.log('[ACCOUNT REFRESH] Fetching for account:', account);
       const accountState = await fetchAccountState(account);
+
+      console.log('[ACCOUNT REFRESH] Received from backend:', {
+        positionsCount: accountState.positions.length,
+        positions: accountState.positions
+      });
 
       setBalance(accountState.on_chain_balance_ae);
       setAvailableCollateral(accountState.available_collateral_ae);
 
-      console.log('[ACCOUNT REFRESH] About to set backend positions:', accountState.positions);
+      console.log('[ACCOUNT REFRESH] About to call setBackendPositions with:', accountState.positions.length, 'positions');
       setBackendPositions(accountState.positions);
 
-      console.log('[ACCOUNT REFRESH] ✓ Account state loaded:', {
-        balance: accountState.on_chain_balance_ae,
-        availableCollateral: accountState.available_collateral_ae,
-        positionsCount: accountState.positions.length,
-        positions: accountState.positions
-      });
+      console.log('[ACCOUNT REFRESH] ✓ setBackendPositions called');
     } catch (error) {
       console.error('[ACCOUNT REFRESH] ✗ Failed to fetch account state:', error);
       // Don't show error toast on periodic refresh failures
@@ -177,10 +177,9 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
           // Use backend balance as source of truth (it's fresher)
           setBalance(backendBalance);
           setAvailableCollateral(accountState.available_collateral_ae);
-
-          console.log('[CONNECT] About to set backend positions:', accountState.positions);
           setBackendPositions(accountState.positions);
-          console.log('[CONNECT] Backend account state loaded:', accountState);
+
+          console.log('[CONNECT] Backend account state loaded with', accountState.positions.length, 'positions');
         } catch (error) {
           console.error('Failed to load account from backend:', error);
           // Set fallback values if backend fails
@@ -645,7 +644,6 @@ function PositionsPanel({
   const [livePositions, setLivePositions] = useState(positions);
 
   useEffect(() => {
-    console.log('[POSITIONS PANEL] Received positions prop:', positions);
     setLivePositions(positions);
   }, [positions]);
 
@@ -665,8 +663,6 @@ function PositionsPanel({
 
     return () => clearInterval(interval);
   }, [livePositions.length, currentPrices]);
-
-  console.log('[POSITIONS PANEL] Rendering with livePositions:', livePositions);
 
   return (
     <Card className="bg-slate-900/50 border-slate-800 shadow-xl">
@@ -738,9 +734,19 @@ function PositionsPanel({
 }
 
 // MAIN APP
-export default function RefinedApp() {
+// Inner component that consumes the Web3 context
+function RefinedAppContent() {
   const toast = useToast();
-  const { balance, backendPositions, account, refreshAccountState } = useWeb3();
+  const web3Context = useWeb3();
+  const { balance, backendPositions, account, refreshAccountState } = web3Context;
+
+  // Debug: Log context value on every render
+  console.log('[REFINED APP] Context value received:', {
+    backendPositionsCount: backendPositions?.length ?? 0,
+    backendPositions: backendPositions,
+    account: account
+  });
+
   const [selectedAsset, setSelectedAsset] = useState(ASSETS[0]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>(
@@ -847,14 +853,10 @@ export default function RefinedApp() {
 
   // Sync backend positions to local positions for display
   useEffect(() => {
-    console.log('[POSITIONS] Converting backend positions to frontend format:', {
-      backendPositionsCount: backendPositions.length,
-      backendPositions: backendPositions
-    });
+    console.log('[POSITIONS SYNC] useEffect triggered with backendPositions:', backendPositions.length, backendPositions);
 
     // Convert backend positions to frontend Position type
-    // Handle both empty and non-empty arrays
-    const convertedPositions: Position[] = backendPositions.map((bp, index) => {
+    const convertedPositions: Position[] = backendPositions.map((bp) => {
       const asset = ASSETS.find(a => a.id === bp.asset) || ASSETS[0];
 
       // Generate a stable numeric ID from UUID using hash
@@ -863,7 +865,7 @@ export default function RefinedApp() {
         return acc + char.charCodeAt(0);
       }, 0);
 
-      const converted = {
+      return {
         id: numericId,
         asset: {
           ...asset,
@@ -876,12 +878,9 @@ export default function RefinedApp() {
         liqPrice: bp.liquidation_price,
         pnl: bp.unrealized_pnl_usd || 0,
       };
-
-      console.log('[POSITIONS] Converted position:', { backend: bp, frontend: converted });
-      return converted;
     });
 
-    console.log('[POSITIONS] Setting positions state:', convertedPositions);
+    console.log('[POSITIONS SYNC] Setting', convertedPositions.length, 'positions to state');
     setPositions(convertedPositions);
   }, [backendPositions, currentPrices]);
 
@@ -956,7 +955,7 @@ export default function RefinedApp() {
   };
 
   return (
-    <Web3Provider>
+    <>
       <Toaster />
       <div className="min-h-screen bg-slate-950 text-slate-100">
         <Header />
@@ -1071,6 +1070,15 @@ export default function RefinedApp() {
           )}
         </main>
       </div>
+    </>
+  );
+}
+
+// Outer component that provides the Web3 context
+export default function RefinedApp() {
+  return (
+    <Web3Provider>
+      <RefinedAppContent />
     </Web3Provider>
   );
 }

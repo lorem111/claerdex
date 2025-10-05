@@ -514,9 +514,7 @@ def get_price_history_endpoint(asset: str = "AE", interval: str = "1m", limit: i
 @app.get("/account/{user_address}", response_model=Account)
 def get_account_state(user_address: str):
     """The main data endpoint for the frontend dashboard."""
-    print(f"[GET] Fetching account state for {user_address}")
     account = get_or_create_account(user_address)
-    print(f"[GET] Loaded account with {len(account.positions)} positions")
 
     # Recalculate PnL for all open positions in real-time
     for position in account.positions:
@@ -535,15 +533,12 @@ def get_account_state(user_address: str):
         position.unrealized_pnl_ae = pnl_data["pnl_usd"] / current_price  # Convert to AE
         position.current_price = current_price
 
-    print(f"[GET] Returning account with {len(account.positions)} positions")
     return account
 
 @app.post("/positions/open")
 def open_position(request: OpenPositionRequest):
     """Endpoint to open a new perpetual futures position."""
-    print(f"[OPEN] Opening {request.side} {request.asset} position for {request.user_address}")
     account = get_or_create_account(request.user_address)
-    print(f"[OPEN] Account has {len(account.positions)} positions before adding new one")
 
     # 1. Validation
     if request.collateral_to_use_ae > account.available_collateral_ae:
@@ -571,18 +566,15 @@ def open_position(request: OpenPositionRequest):
         liquidation_price=liquidation_price
     )
 
-    print(f"[OPEN] Created position {new_position.id}")
     account.positions.append(new_position)
     account.available_collateral_ae -= request.collateral_to_use_ae
-    print(f"[OPEN] Account now has {len(account.positions)} positions")
 
     # Save updated account state to KV
     db.save_account(account)
-    print(f"[OPEN] ✓ Saved account with position to KV")
 
     # 5. The "Hybrid Model" Proof: Record the trade on-chain for auditing
     tx_hash = ae.record_trade_on_chain(new_position)
-    print(f"[OPEN] Trade {new_position.id} recorded on-chain with tx: {tx_hash}")
+    print(f"[TRADE] Position {new_position.id} opened and recorded on-chain: {tx_hash}")
 
     return {"message": "Position opened successfully", "position": new_position, "on_chain_tx": tx_hash}
 

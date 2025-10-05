@@ -5,6 +5,7 @@
   "main": "src/operator/index.js",
   "scripts": {
     "start": "node src/operator/index.js",
+    "deploy": "node src/deploy/deployContract.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
