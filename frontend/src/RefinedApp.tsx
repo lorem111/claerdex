@@ -468,22 +468,32 @@ export default function RefinedApp() {
   const fetchPrices = async () => {
     try {
       const response = await fetch(PRICE_API_URL);
-      const data = await response.json();
+      const responseData = await response.json();
 
-      // Calculate 24h change based on price difference
-      setPriceChanges(prev => {
-        const changes: Record<string, number> = {};
-        Object.keys(data).forEach(assetId => {
+      // Handle new API format with 24h stats
+      const data = responseData.data || responseData;
+
+      // Extract prices and 24h changes
+      const newPrices: Record<string, number> = {};
+      const newChanges: Record<string, number> = {};
+
+      Object.keys(data).forEach(assetId => {
+        if (typeof data[assetId] === 'object') {
+          // New format: {data: {AE: {price: 0.03, change_percent_24h: 2.15, ...}}}
+          newPrices[assetId] = data[assetId].price;
+          newChanges[assetId] = data[assetId].change_percent_24h || 0;
+        } else {
+          // Old format: {AE: 0.03, BTC: 68000, ...}
+          newPrices[assetId] = data[assetId];
+          // Calculate change based on difference from previous price
           const oldPrice = currentPrices[assetId] || data[assetId];
-          const newPrice = data[assetId];
-          const percentChange = ((newPrice - oldPrice) / oldPrice) * 100;
-          // Smooth out the change calculation
-          changes[assetId] = prev[assetId] ? (prev[assetId] * 0.9 + percentChange * 0.1) : 0;
-        });
-        return changes;
+          const percentChange = ((data[assetId] - oldPrice) / oldPrice) * 100;
+          newChanges[assetId] = priceChanges[assetId] ? (priceChanges[assetId] * 0.9 + percentChange * 0.1) : 0;
+        }
       });
 
-      setCurrentPrices(data);
+      setCurrentPrices(newPrices);
+      setPriceChanges(newChanges);
     } catch (error) {
       console.error('Failed to fetch prices:', error);
     }
