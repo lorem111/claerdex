@@ -65,14 +65,40 @@ The API will be available at `http://localhost:8000`
 Health check endpoint
 
 ### `GET /prices` (or `/api/prices` on Vercel)
-Get current prices for all supported assets (AE, BTC, ETH)
+Get current prices for all supported assets (AE, BTC, ETH, SOL). Prices update every 5 seconds with realistic random movements.
 
 **Response:**
 ```json
 {
-  "AE": 0.03,
-  "BTC": 68000.0,
-  "ETH": 3500.0
+  "prices": {
+    "AE": 0.0302,
+    "BTC": 68156.42,
+    "ETH": 3487.91,
+    "SOL": 151.34
+  },
+  "timestamp": 1696531200,
+  "update_interval": 5
+}
+```
+
+**Note:** Prices currently use mock data with random movements. Real oracle integration coming soon.
+
+### `GET /blockchain/status` (or `/api/blockchain/status` on Vercel)
+Get current Aeternity blockchain status and latest block information.
+
+**Response:**
+```json
+{
+  "network": "mainnet",
+  "latest_block": {
+    "height": 1187935,
+    "hash": "kh_2cu9Dmb6zTtLUeKXothCVh8iqS1fe2uQ6W1BoNtdPmwHa9TKGF",
+    "time": 1759639965179,
+    "transactions_count": 39,
+    "micro_blocks_count": 40,
+    "miner": "ak_jZdweEpAFwRdTQSXn4c91nEWTRgVvVxyMK15ZcsCxLLuy46at"
+  },
+  "explorer_url": "https://explorer.aeternity.io/keyblock/kh_2cu9..."
 }
 ```
 

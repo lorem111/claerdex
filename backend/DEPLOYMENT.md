@@ -91,6 +91,7 @@ When deployed to Vercel, all endpoints are automatically prefixed with `/api`:
 
 - `GET /api` - Health check
 - `GET /api/prices` - Get asset prices
+- `GET /api/blockchain/status` - Get current blockchain status and latest block
 - `GET /api/account/{address}` - Get user account
 - `POST /api/positions/open` - Open position
 - `POST /api/positions/close/{id}` - Close position

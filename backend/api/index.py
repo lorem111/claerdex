@@ -55,12 +55,36 @@ def root():
 @app.get("/prices")
 def get_all_prices():
     """Endpoint for the frontend to get all relevant asset prices at once."""
+    import time
+
     prices = {
         "AE": ae.get_oracle_price("AE"),
         "BTC": ae.get_oracle_price("BTC"),
         "ETH": ae.get_oracle_price("ETH"),
+        "SOL": ae.get_oracle_price("SOL"),
     }
-    return prices
+
+    # Add metadata for the frontend
+    return {
+        "prices": prices,
+        "timestamp": int(time.time()),
+        "update_interval": 5,  # Prices update every 5 seconds
+    }
+
+@app.get("/blockchain/status")
+def get_blockchain_status():
+    """
+    Get current Aeternity blockchain status including latest block information.
+
+    Returns the latest keyblock height, hash, and other network statistics.
+    """
+    block_info = ae.get_latest_block()
+
+    return {
+        "network": "mainnet",
+        "latest_block": block_info,
+        "explorer_url": f"https://explorer.aeternity.io/keyblock/{block_info.get('hash', '')}" if block_info.get('hash') else None
+    }
 
 @app.get("/account/{user_address}", response_model=Account)
 def get_account_state(user_address: str):
