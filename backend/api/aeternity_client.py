@@ -263,7 +263,7 @@ def get_24h_stats(asset: str) -> dict:
     current_price = get_oracle_price(asset)
 
     # Get 24h of historical data (using 1h intervals = 24 points)
-    history_24h = get_price_history(asset, interval="1h", limit=24)
+    history_24h = get_price_history(asset, interval="1h", limit=24, current_price=current_price)
 
     if not history_24h:
         return {
