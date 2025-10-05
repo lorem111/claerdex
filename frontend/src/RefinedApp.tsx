@@ -35,6 +35,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatUSD, formatPrice, formatPnL, formatPercentage, formatAE } from '@/utils/formatters';
 import { connectSuperheroWallet } from '@/utils/wallet';
 import { fetchAccountState, openPosition as openPositionAPI, closePosition as closePositionAPI, BackendAccount, BackendPosition } from '@/utils/api';
+import { getCachedPrices, cachePrices, CachedPriceData } from '@/utils/priceCache';
 
 // TYPES
 type Asset = {
@@ -211,6 +212,7 @@ const useWeb3 = () => useContext(Web3Context);
 function Header() {
   const { account, balance, isConnecting, connectWallet, disconnectWallet } = useWeb3();
   const [currentBlock, setCurrentBlock] = useState(0);
+  const [network, setNetwork] = useState<'mainnet' | 'testnet'>('mainnet');
 
   // Fetch block number from API
   useEffect(() => {
@@ -260,6 +262,20 @@ function Header() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Network Toggle */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-900/50 rounded-lg border border-slate-800">
+              <span className="text-xs text-slate-400">Network:</span>
+              <button
+                onClick={() => setNetwork(network === 'mainnet' ? 'testnet' : 'mainnet')}
+                className="relative inline-flex items-center gap-2 px-3 py-1 rounded-md transition-all duration-200 hover:bg-slate-800"
+              >
+                <div className={`w-2 h-2 rounded-full ${network === 'mainnet' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                <span className={`text-sm font-semibold ${network === 'mainnet' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {network === 'mainnet' ? 'Mainnet' : 'Testnet'}
+                </span>
+              </button>
+            </div>
+
             {account && (
               <div className="flex items-center gap-3 px-4 py-2 bg-slate-900/50 rounded-lg border border-slate-800">
                 <div className="text-right">
@@ -696,12 +712,37 @@ export default function RefinedApp() {
   const [priceChanges, setPriceChanges] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState('perpetuals');
 
-  // Fetch real prices from API
-  const fetchPrices = async () => {
+  // Fetch real prices from API with instant cache-first loading
+  const fetchPrices = async (skipCache = false) => {
     try {
-      console.log('[PRICES] Fetching REAL prices from backend...');
+      // INSTANT LOAD: Check cache first (no network delay!)
+      if (!skipCache) {
+        const cached = getCachedPrices();
+        if (cached && cached.data) {
+          console.log('[PRICES] ⚡ INSTANT load from cache:', cached.data);
+
+          // Extract prices from cached data
+          const cachedPrices: Record<string, number> = {};
+          const cachedChanges: Record<string, number> = {};
+
+          Object.keys(cached.data).forEach(assetId => {
+            cachedPrices[assetId] = cached.data[assetId].price;
+            cachedChanges[assetId] = cached.data[assetId].change_percent_24h || 0;
+          });
+
+          // Display cached prices IMMEDIATELY
+          setCurrentPrices(cachedPrices);
+          setPriceChanges(cachedChanges);
+        }
+      }
+
+      // BACKGROUND REFRESH: Fetch fresh data (this happens in background)
+      console.log('[PRICES] 🔄 Fetching fresh prices from backend...');
       const response = await fetch(PRICE_API_URL);
       const responseData = await response.json();
+
+      // Cache the fresh data for next instant load
+      cachePrices(responseData);
 
       // Handle new API format with 24h stats
       const data = responseData.data || responseData;
@@ -725,7 +766,7 @@ export default function RefinedApp() {
         }
       });
 
-      console.log('[PRICES] ✓ Received REAL prices from backend:', newPrices);
+      console.log('[PRICES] ✓ Updated with fresh prices from backend:', newPrices);
       setCurrentPrices(newPrices);
       setPriceChanges(newChanges);
     } catch (error) {

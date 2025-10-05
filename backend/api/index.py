@@ -55,6 +55,7 @@ def root():
 def get_all_prices():
     """Endpoint for the frontend to get all relevant asset prices at once."""
     import time
+    from fastapi.responses import JSONResponse
 
     assets = ["AE", "BTC", "ETH", "SOL"]
 
@@ -79,11 +80,21 @@ def get_all_prices():
         }
 
     # Add metadata for the frontend
-    return {
+    response_data = {
         "data": price_data,
         "timestamp": int(time.time()),
         "update_interval": 5,  # Prices update every 5 seconds
     }
+
+    # Add cache headers for instant browser caching (stale-while-revalidate)
+    # Browser can use cached version for up to 5 seconds, and revalidate in background for up to 60 seconds
+    return JSONResponse(
+        content=response_data,
+        headers={
+            "Cache-Control": "public, max-age=5, stale-while-revalidate=60",
+            "CDN-Cache-Control": "public, max-age=5",
+        }
+    )
 
 @app.get("/blockchain/status")
 def get_blockchain_status():

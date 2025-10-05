@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, IChartApi, ISeriesApi, LineStyle, Time } from 'lightweight-charts';
 import { formatPrice } from '@/utils/formatters';
+import { getCachedChart, cacheChart } from '@/utils/priceCache';
 
 type Position = {
   id: number;
@@ -31,14 +32,26 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
   const seriesRef = useRef<ISeriesApi<'Area'> | null>(null);
   const [historicalData, setHistoricalData] = useState<Array<{ time: Time; value: number }>>([]);
 
-  // Fetch real historical data from backend - NO MOCK DATA
+  // Fetch real historical data from backend with INSTANT cache-first loading
   useEffect(() => {
-    // Clear old data first
-    setHistoricalData([]);
-
     const fetchHistoricalData = async () => {
       try {
-        console.log(`[CHART] Fetching historical data for ${asset.id}...`);
+        // INSTANT LOAD: Try cache first for instant chart display
+        const cached = getCachedChart(asset.id, '1m');
+        if (cached) {
+          console.log(`[CHART] ⚡ INSTANT load from cache for ${asset.id}`);
+          const chartData = cached.data.map((point: any) => ({
+            time: Math.floor(point.timestamp / 1000) as Time,
+            value: point.close,
+          }));
+          setHistoricalData(chartData);
+        } else {
+          // Clear old data if no cache
+          setHistoricalData([]);
+        }
+
+        // BACKGROUND REFRESH: Fetch fresh data
+        console.log(`[CHART] 🔄 Fetching fresh historical data for ${asset.id}...`);
         const response = await fetch(
           `https://claerdex-backend.vercel.app/prices/history?asset=${asset.id}&interval=1m&limit=180`
         );
@@ -53,6 +66,9 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
           throw new Error('No data received from backend');
         }
 
+        // Cache the fresh data for next instant load
+        cacheChart(asset.id, '1m', result.data);
+
         console.log(`[CHART] ✓ Received ${result.data.length} REAL data points for ${asset.id}`);
         console.log(`[CHART] Price range: $${result.data[0].close} → $${result.data[result.data.length - 1].close}`);
 
@@ -63,11 +79,10 @@ const TradingChart: React.FC<TradingChartProps> = ({ asset, currentPrice, positi
         }));
 
         setHistoricalData(chartData);
-        console.log(`[CHART] ✓ Chart updated with REAL backend data for ${asset.id}`);
+        console.log(`[CHART] ✓ Chart updated with fresh backend data for ${asset.id}`);
       } catch (error) {
         console.error(`[CHART] ✗ Failed to fetch historical data:`, error);
-        // DO NOT use mock data - leave empty to show the error clearly
-        setHistoricalData([]);
+        // Keep cached data if fetch fails, or show empty
       }
     };
 
