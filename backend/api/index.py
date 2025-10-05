@@ -292,6 +292,18 @@ def get_blockchain_status():
         "explorer_url": f"https://explorer.aeternity.io/keyblock/{block_info.get('hash', '')}" if block_info.get('hash') else None
     }
 
+@app.post("/admin/seed-history")
+def seed_history():
+    """Admin endpoint to force seed price history from CoinGecko/fallback"""
+    print("[ADMIN] Manual history seeding requested...")
+    initialize_price_history()
+
+    counts = {asset: len(RECORDED_PRICE_HISTORY[asset]) for asset in RECORDED_PRICE_HISTORY}
+    return {
+        "message": "Price history seeded",
+        "recorded_points": counts
+    }
+
 @app.get("/debug/coingecko")
 def debug_coingecko():
     """
