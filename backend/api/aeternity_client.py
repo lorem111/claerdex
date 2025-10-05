@@ -155,10 +155,38 @@ def get_oracle_price(asset: str) -> float:
     return current_price
 
 def get_on_chain_balance(user_address: str) -> float:
-    """Queries our ClaerVault.sophia smart contract to get a user's deposited balance."""
-    print(f"Fetching on-chain balance for {user_address}...")
-    # ... actual aeternity-sdk-python code to call the contract's `get_balance` function ...
-    return 1000.0  # Return a mock value for now
+    """
+    Fetches the REAL on-chain balance for an Aeternity address.
+    Queries the Aeternity mainnet node directly via HTTP API.
+    """
+    print(f"[BALANCE] Fetching REAL on-chain balance for {user_address}...")
+
+    try:
+        # Query Aeternity mainnet node for account balance
+        node_url = "https://mainnet.aeternity.io"
+        response = requests.get(
+            f"{node_url}/v3/accounts/{user_address}",
+            timeout=5
+        )
+
+        if response.status_code == 200:
+            data = response.json()
+            balance_aettos = int(data.get("balance", 0))
+            # Convert from aettos to AE (1 AE = 10^18 aettos)
+            balance_ae = balance_aettos / 1e18
+            print(f"[BALANCE] ✓ Real balance for {user_address}: {balance_ae} AE")
+            return balance_ae
+        elif response.status_code == 404:
+            # Account doesn't exist on chain yet (0 balance)
+            print(f"[BALANCE] Account not found on-chain, returning 0 AE")
+            return 0.0
+        else:
+            print(f"[BALANCE] ✗ Error fetching balance: HTTP {response.status_code}")
+            return 0.0
+
+    except Exception as e:
+        print(f"[BALANCE] ✗ Error fetching balance: {e}")
+        return 0.0
 
 def record_trade_on_chain(position: Position) -> str:
     """Hashes the trade details and posts the hash to our smart contract for auditing."""

@@ -149,13 +149,26 @@ const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       setTimeout(async () => {
         try {
           const accountState = await fetchAccountState(walletInfo.address);
-          setBalance(accountState.on_chain_balance_ae);
+
+          // Compare wallet balance vs backend balance
+          const walletBalance = walletInfo.balance;
+          const backendBalance = accountState.on_chain_balance_ae;
+
+          console.log('[BALANCE] Wallet balance:', walletBalance, 'AE');
+          console.log('[BALANCE] Backend balance:', backendBalance, 'AE');
+
+          if (Math.abs(walletBalance - backendBalance) > 0.01) {
+            console.warn('[BALANCE] ⚠️ Wallet and backend balances differ!');
+          }
+
+          // Use backend balance as source of truth (it's fresher)
+          setBalance(backendBalance);
           setAvailableCollateral(accountState.available_collateral_ae);
           setBackendPositions(accountState.positions);
           console.log('Backend account state loaded:', accountState);
         } catch (error) {
           console.error('Failed to load account from backend:', error);
-          // Set fallback values
+          // Set fallback values if backend fails
           setAvailableCollateral(walletInfo.balance);
         }
       }, 100);
