@@ -2,7 +2,7 @@
 
 > A Hybrid Perpetual DEX on Aeternity - Combining on-chain security with off-chain performance
 
-Claerdex is a next-generation decentralized exchange for perpetual futures trading, built on the Aeternity blockchain. It leverages a hybrid architecture that records trades on-chain for transparency while executing them off-chain for speed.
+Claerdex is a next-generation decentralized exchange for perpetual futures trading, built on the Aeternity blockchain. It leverages a hybrid architecture that records trades on-chain for transparency while executing them off-chain (or on state channels) for speed.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Aeternity](https://img.shields.io/badge/blockchain-Aeternity-pink.svg)
@@ -15,7 +15,7 @@ Claerdex is a next-generation decentralized exchange for perpetual futures tradi
 - **Perpetual Futures** - Long/Short positions with up to 50x leverage
 - **Spot Trading** - Direct buy/sell of crypto assets
 - **Stocks Trading** - Perpetual futures on traditional stocks (AAPL, TSLA, etc.)
-- **Live Oracle Prices** - Real-time price feeds from CoinGecko
+- **Live Oracle Prices** - Real-time price feeds with Aeternity chain
 - **USD-Based Trading** - Enter positions in USD amounts, auto-calculated to AE
 
 ### User Experience
@@ -25,6 +25,8 @@ Claerdex is a next-generation decentralized exchange for perpetual futures tradi
 - **Portfolio View** - Comprehensive overview of all positions and performance
 
 ### Technical
+- **Aeternity Oracles** - Native blockchain oracles for trustless, decentralized price feeds
+- **Aeternity State Channels** - Layer 2 solution for instant, zero-fee trading at scale
 - **Hybrid Model** - Fast off-chain execution + on-chain audit trail
 - **Vercel KV Storage** - Redis-based persistent state management
 - **Price History Persistence** - Chart data survives deployments
@@ -52,26 +54,6 @@ Claerdex is a next-generation decentralized exchange for perpetual futures tradi
                      │ - Price Data │
                      └──────────────┘
 ```
-
-### How It Works
-
-1. **User Opens Position**:
-   - Frontend sends request to backend API
-   - Backend validates available collateral
-   - Position created and saved to Vercel KV
-   - Trade recorded on-chain with hash for auditing
-   - Frontend refreshes and displays position
-
-2. **Price Updates**:
-   - Backend fetches live prices from CoinGecko every 3 seconds
-   - Prices saved to KV with timestamp
-   - Frontend polls for updates
-   - Charts display historical price data from KV
-
-3. **Position Management**:
-   - Real-time PnL calculation based on current prices
-   - Liquidation price monitoring
-   - Close positions and realize profits/losses
 
 ## 🚀 Quick Start
 
@@ -109,7 +91,7 @@ Claerdex is a next-generation decentralized exchange for perpetual futures tradi
    npm start
    ```
 
-4. **Oracle Service** (Optional - for price updates)
+4. **Oracle Service** (Optional - for accurate updates)
    ```bash
    cd oracle
    npm install
@@ -224,35 +206,6 @@ npm run build
 # Deploy backend (example with gunicorn)
 cd backend
 gunicorn api.index:app -w 4 -k uvicorn.workers.UvicornWorker
-```
-
-## 🛠️ Development Tips
-
-### Skip Deployment
-Use special commit tags to prevent auto-deployment:
-```bash
-git commit -m "[skip ci] Update documentation"
-```
-
-### Debug Logging
-The app includes extensive logging for debugging:
-- `[WEB3 PROVIDER]` - Wallet and context state
-- `[POSITIONS SYNC]` - Position data flow
-- `[TRADE]` - Trade execution
-- `[ACCOUNT REFRESH]` - Backend data fetching
-
-### Local Testing
-```bash
-# Test backend
-cd backend
-pytest
-
-# Build frontend
-cd frontend
-npm run build
-
-# Type check
-npm run type-check
 ```
 
 ## 📊 Trading Features Explained
