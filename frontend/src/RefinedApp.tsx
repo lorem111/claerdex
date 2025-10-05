@@ -748,6 +748,31 @@ export default function RefinedApp() {
     return () => clearInterval(accountInterval);
   }, [account, refreshAccountState]);
 
+  // Sync backend positions to local positions for display
+  useEffect(() => {
+    if (backendPositions.length === 0) return;
+
+    // Convert backend positions to frontend Position type
+    const convertedPositions: Position[] = backendPositions.map(bp => {
+      const asset = ASSETS.find(a => a.id === bp.asset) || ASSETS[0];
+      return {
+        id: parseInt(bp.id.split('-')[0]), // Use first part of UUID as number
+        asset: {
+          ...asset,
+          price: bp.current_price || currentPrices[bp.asset] || asset.price,
+        },
+        side: bp.side.toUpperCase() as 'LONG' | 'SHORT',
+        size: bp.size_usd,
+        collateral: bp.collateral_ae,
+        entryPrice: bp.entry_price,
+        liqPrice: bp.liquidation_price,
+        pnl: bp.unrealized_pnl_usd || 0,
+      };
+    });
+
+    setPositions(convertedPositions);
+  }, [backendPositions, currentPrices]);
+
   const handleAssetChange = (assetId: string) => {
     const asset = ASSETS.find(a => a.id === assetId);
     if (asset) {
@@ -761,22 +786,9 @@ export default function RefinedApp() {
   };
 
   const handleOpenPosition = (side: 'LONG' | 'SHORT', size: number, collateral: number, leverage: number) => {
-    const currentPrice = currentPrices[selectedAsset.id];
-    const liqPrice = side === 'LONG'
-      ? currentPrice * (1 - (1 / leverage) * 0.9) // 90% of margin
-      : currentPrice * (1 + (1 / leverage) * 0.9);
-
-    const newPosition: Position = {
-      id: Date.now(),
-      asset: selectedAsset,
-      side,
-      size,
-      collateral,
-      entryPrice: currentPrice,
-      liqPrice,
-      pnl: 0,
-    };
-    setPositions(prev => [...prev, newPosition]);
+    // Position is already created on backend and will be synced via backendPositions
+    // This is just a callback for any additional UI updates if needed
+    console.log('Position opened via backend:', { side, size, collateral, leverage });
   };
 
   const handleClosePosition = async (id: number) => {
@@ -789,14 +801,20 @@ export default function RefinedApp() {
     if (!position) return;
 
     try {
+      // Find the backend position ID (it's a UUID string)
+      const backendPosition = backendPositions.find(bp =>
+        parseInt(bp.id.split('-')[0]) === id
+      );
+
+      if (!backendPosition) {
+        throw new Error('Position not found in backend');
+      }
+
       // Call backend API to close position
-      const response = await closePositionAPI(account, id.toString());
+      const response = await closePositionAPI(account, backendPosition.id);
 
       // Refresh account state to get updated positions and balance
       await refreshAccountState();
-
-      // Remove from local state
-      setPositions(prev => prev.filter(p => p.id !== id));
 
       toast({
         title: 'Position Closed',
