@@ -697,6 +697,7 @@ export default function RefinedApp() {
   // Fetch real prices from API
   const fetchPrices = async () => {
     try {
+      console.log('[PRICES] Fetching REAL prices from backend...');
       const response = await fetch(PRICE_API_URL);
       const responseData = await response.json();
 
@@ -722,10 +723,11 @@ export default function RefinedApp() {
         }
       });
 
+      console.log('[PRICES] ✓ Received REAL prices from backend:', newPrices);
       setCurrentPrices(newPrices);
       setPriceChanges(newChanges);
     } catch (error) {
-      console.error('Failed to fetch prices:', error);
+      console.error('[PRICES] ✗ Failed to fetch prices:', error);
     }
   };
 
