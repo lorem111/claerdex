@@ -87,9 +87,9 @@ def get_oracle_price(asset: str) -> float:
     max_price = base_price * 1.1
     current_price = max(min_price, min(max_price, current_price))
 
-    # Round to appropriate decimal places
+    # Round to appropriate decimal places (more precision for low-priced assets)
     if asset == "AE":
-        current_price = round(current_price, 4)
+        current_price = round(current_price, 6)  # Need 6 decimals for smooth charts at ~$0.007 price
     elif asset in ["BTC", "ETH"]:
         current_price = round(current_price, 2)
     elif asset == "SOL":
@@ -223,9 +223,9 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
             price = price * (1 - price_change)  # Walk backwards
 
         # Add to history (we'll reverse it later)
-        # Round appropriately
+        # Round appropriately (more precision for low-priced assets)
         if asset == "AE":
-            rounded_price = round(price, 4)
+            rounded_price = round(price, 6)  # 6 decimals for smooth charts
         else:
             rounded_price = round(price, 2)
 
@@ -235,9 +235,9 @@ def get_price_history(asset: str, interval: str = "1m", limit: int = 60) -> list
 
         history.append({
             "timestamp": timestamp * 1000,  # Convert to milliseconds
-            "open": round(rounded_price - random.uniform(-variation, variation), 4 if asset == "AE" else 2),
-            "high": round(rounded_price + random.uniform(0, variation), 4 if asset == "AE" else 2),
-            "low": round(rounded_price - random.uniform(0, variation), 4 if asset == "AE" else 2),
+            "open": round(rounded_price - random.uniform(-variation, variation), 6 if asset == "AE" else 2),
+            "high": round(rounded_price + random.uniform(0, variation), 6 if asset == "AE" else 2),
+            "low": round(rounded_price - random.uniform(0, variation), 6 if asset == "AE" else 2),
             "close": rounded_price,
         })
 
@@ -294,7 +294,7 @@ def get_24h_stats(asset: str) -> dict:
         "high_24h": high_24h,
         "low_24h": low_24h,
         "open_24h": price_24h_ago,
-        "change_24h": round(change_24h, 4 if asset == "AE" else 2),
+        "change_24h": round(change_24h, 6 if asset == "AE" else 2),
         "change_percent_24h": round(change_percent_24h, 2),
     }
 
