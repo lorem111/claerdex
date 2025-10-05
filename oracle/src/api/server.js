@@ -1,14 +1,11 @@
 const express = require("express");
 const cors = require("cors");
-const { Node, MemoryAccount, AeSdk } = require("@aeternity/aepp-sdk");
-const BigNumber = require("bignumber.js");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 const ORACLE_ID = "ok_2Nn41cS6fjnAQFqm8nvpDfrKBzJ7Wzntdb5ZsTs4bQ7UCJ3Bew";
-const MAINNET_URL = "https://mainnet.aeternity.io/";
 
 // Cache for prices
 let priceCache = {
@@ -19,54 +16,32 @@ let priceCache = {
   lastUpdate: 0,
 };
 
-const CACHE_DURATION = 60000; // 1 minute cache
+const CACHE_DURATION = 30000; // 30 second cache
 
-class OracleQuerier {
-  async init() {
-    if (!this.client) {
-      // Use a temporary account just for querying (read-only operations need an account)
-      const { Node, MemoryAccount, AeSdk, generateKeyPair } = require("@aeternity/aepp-sdk");
-      const tempKeypair = generateKeyPair();
-
-      this.client = new AeSdk({
-        nodes: [
-          {
-            name: "node",
-            instance: new Node(process.env.NODE_URL || MAINNET_URL),
-          },
-        ],
-        accounts: [new MemoryAccount(tempKeypair.secretKey)],
-      });
-    }
-
-    if (!this.oracle) {
-      this.oracle = await this.client.getOracleObject(ORACLE_ID);
-      console.log("API initialized oracle:", this.oracle.id);
-    }
-  }
-
-  async queryPrice(currency) {
-    try {
-      const query = await this.oracle.postQuery(currency, {
-        queryFee: this.oracle.queryFee,
-      });
-
-      console.log(`Queried for '${currency}' with query id: ${query.id}`);
-
-      // Poll for response with timeout
-      const response = await query.pollForResponse({ attempts: 20, interval: 2000 });
-      const price = new BigNumber(response).div(10 ** 18).toNumber();
-
-      console.log(`Got response for ${currency}:`, price);
-      return price;
-    } catch (error) {
-      console.error(`Error querying ${currency}:`, error.message);
-      return null;
-    }
+async function fetchCoinGeckoPrice(currency) {
+  try {
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=aeternity,bitcoin,ethereum,solana&vs_currencies=${currency}`
+    );
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error(`Error fetching from CoinGecko:`, error.message);
+    return null;
   }
 }
 
-const querier = new OracleQuerier();
+async function fetchAllPrices() {
+  const data = await fetchCoinGeckoPrice("usd");
+  if (!data) return null;
+
+  return {
+    BTC: data.bitcoin?.usd || null,
+    ETH: data.ethereum?.usd || null,
+    SOL: data.solana?.usd || null,
+    AE: data.aeternity?.usd || null,
+  };
+}
 
 // Health check
 app.get("/", (req, res) => {
@@ -83,48 +58,31 @@ app.get("/prices", async (req, res) => {
     const now = Date.now();
 
     // Return cached prices if fresh
-    if (now - priceCache.lastUpdate < CACHE_DURATION && priceCache.btc !== null) {
+    if (now - priceCache.lastUpdate < CACHE_DURATION && priceCache.BTC !== null) {
       return res.json({
-        data: {
-          BTC: priceCache.btc,
-          ETH: priceCache.eth,
-          SOL: priceCache.sol,
-          AE: priceCache.ae,
-        },
+        data: priceCache,
         cached: true,
         timestamp: Math.floor(priceCache.lastUpdate / 1000),
       });
     }
 
-    // Initialize if needed
-    if (!querier.oracle) {
-      await querier.init();
-    }
+    // Fetch fresh prices
+    const prices = await fetchAllPrices();
 
-    // Query all prices in parallel
-    const [btc, eth, sol, ae] = await Promise.all([
-      querier.queryPrice("btc"),
-      querier.queryPrice("eth"),
-      querier.queryPrice("sol"),
-      querier.queryPrice("usd").then(usd => usd ? 1 / usd : null), // AE price is inverse of USD price
-    ]);
+    if (!prices) {
+      return res.status(500).json({
+        error: "Failed to fetch prices from CoinGecko",
+      });
+    }
 
     // Update cache
     priceCache = {
-      btc,
-      eth,
-      sol,
-      ae,
+      ...prices,
       lastUpdate: now,
     };
 
     res.json({
-      data: {
-        BTC: btc,
-        ETH: eth,
-        SOL: sol,
-        AE: ae,
-      },
+      data: prices,
       cached: false,
       timestamp: Math.floor(now / 1000),
     });
@@ -140,29 +98,29 @@ app.get("/prices", async (req, res) => {
 // Get single price
 app.get("/price/:asset", async (req, res) => {
   try {
-    const asset = req.params.asset.toLowerCase();
-    const validAssets = ["btc", "eth", "sol", "ae"];
+    const asset = req.params.asset.toUpperCase();
+    const validAssets = ["BTC", "ETH", "SOL", "AE"];
 
     if (!validAssets.includes(asset)) {
       return res.status(400).json({ error: "Invalid asset" });
     }
 
-    // Initialize if needed
-    if (!querier.oracle) {
-      await querier.init();
-    }
+    // Get prices (from cache or fresh)
+    const now = Date.now();
+    let prices;
 
-    let price;
-    if (asset === "ae") {
-      const usd = await querier.queryPrice("usd");
-      price = usd ? 1 / usd : null;
+    if (now - priceCache.lastUpdate < CACHE_DURATION && priceCache.BTC !== null) {
+      prices = priceCache;
     } else {
-      price = await querier.queryPrice(asset);
+      prices = await fetchAllPrices();
+      if (prices) {
+        priceCache = { ...prices, lastUpdate: now };
+      }
     }
 
     res.json({
-      asset: asset.toUpperCase(),
-      price,
+      asset,
+      price: prices ? prices[asset] : null,
       timestamp: Math.floor(Date.now() / 1000),
     });
   } catch (error) {
@@ -177,7 +135,7 @@ app.get("/price/:asset", async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 function startServer() {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Oracle API server running on port ${PORT}`);
   });
 }
